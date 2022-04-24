@@ -9,12 +9,23 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "axios": "^0.26.1",
+    "bootstrap": "^5.1.3",
+    "image-size": "^1.0.1",
+    "mime-types": "^2.1.35",
     "next": "12.1.5",
     "react": "18.0.0",
-    "react-dom": "18.0.0"
+    "react-bootstrap": "^2.3.0",
+    "react-dom": "18.0.0",
+    "react-focus-on": "^3.5.4",
+    "react-images": "^1.2.0-beta.7",
+    "react-photo-gallery": "^8.0.0",
+    "recursive-readdir": "^2.2.2",
+    "swr": "^1.3.0"
   },
   "devDependencies": {
     "eslint": "8.14.0",
-    "eslint-config-next": "12.1.5"
+    "eslint-config-next": "12.1.5",
+    "prettier": "^2.6.2"
   }
 }
