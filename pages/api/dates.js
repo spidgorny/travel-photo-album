@@ -2,6 +2,7 @@ import config from "../../config.json";
 import readdir from "recursive-readdir";
 import path from "path";
 import fs from "fs";
+import { initRecache } from "../../lib/recache.mjs";
 
 export default async function handler(req, res) {
   try {
@@ -37,7 +38,12 @@ export async function getFilesForSection(sectionId) {
     );
   }
   console.log("readdir", imagePath);
-  let files = await readdir(imagePath);
+  // let files = await readdir(imagePath);
+  const cache = await initRecache(imagePath);
+  let files = cache
+    .list()
+    .map((x) => path.join(imagePath, x.replace("<root>", "")));
+  // console.log(files);
 
   if (section.from) {
     const iFrom = files.findIndex((x) => path.basename(x) === section.from);
@@ -54,10 +60,15 @@ export async function getFilesForSection(sectionId) {
     }
   }
 
+  files = files.slice(0, 10);
+  // console.log(files);
+
   files = files.map((x) => ({
     path: x,
     date: getFileDate(x),
   }));
+  // console.log(files);
+
   return files;
 }
 
