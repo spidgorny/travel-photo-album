@@ -1,6 +1,14 @@
 {
   "sections": [
     {
+      "name": "C",
+      "path": "c:/"
+    },
+    {
+      "name": "P",
+      "path": "/media/nas/photo/"
+    },
+    {
       "name": "Marina 1+ 5t 2022-04",
       "path": "/media/nas/photo/Photos/2022/Marina-5t/2022-04"
     },
