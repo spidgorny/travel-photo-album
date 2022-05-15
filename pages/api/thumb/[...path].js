@@ -3,6 +3,8 @@ import fs from "fs";
 import mime from "mime-types";
 import { joinSectionPath } from "../../../lib/files.mjs";
 
+const thumbRoot = "c:/dev/2022-xps/pinacotheque/data";
+
 export default async function handler(req, res) {
   try {
     let [sectionId, ...filePath] = req.query.path;
