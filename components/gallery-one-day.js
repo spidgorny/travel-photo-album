@@ -35,19 +35,20 @@ export function GalleryOneDay({ sectionId, date }) {
 		[data]
 	);
 	const [dimensions, setDimensions] = useState(photos);
-	console.log(dimensions);
 
 	useEffect(() => {
 		async function fetchDimensions() {
 			for (let [index, img] of photos.entries()) {
 				console.log("dimensions", dimensions.length);
-				const res = await axios.get(`/api/exif/${sectionId}/${img.path}`);
-				const newDim = [...dimensions];
-				newDim[index] = {
-					...newDim[index],
-					...res.data,
-				};
-				setDimensions(newDim);
+				const { data } = await axios.get(`/api/exif/${sectionId}/${img.path}`);
+				if (data) {
+					const newDim = [...photos.map((x, index) => dimensions[index] ?? x)];
+					newDim[index] = {
+						...img,
+						...data,
+					};
+					setDimensions(newDim);
+				}
 			}
 		}
 
