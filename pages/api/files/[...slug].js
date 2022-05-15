@@ -4,6 +4,7 @@ import path from "path";
 import { globby } from "globby";
 import invariant from "tiny-invariant";
 import readdir from "@jsdevtools/readdir-enhanced";
+import { DateTime } from "luxon";
 
 export default async function handler(req, res) {
   try {
@@ -37,6 +38,8 @@ export default async function handler(req, res) {
     }
     // console.log({ files });
     res.setHeader("Cache-Control", "public, s-maxage=6000");
+    res.setHeader("Expires", DateTime.now().plus({ days: 30 }).toHTTP());
+    res.setHeader("ETag", filePath.join("/"));
     res
       .status(200)
       .json({ sectionInput, sectionId, section, imagePath, files });
@@ -46,6 +49,26 @@ export default async function handler(req, res) {
       .status(500)
       .json({ status: "error", message: e.message, stack: e.stack });
   }
+}
+import cache from "memory-cache";
+import crypto from "crypto";
+
+const myCache = new cache.Cache();
+
+// will hash the vars
+export async function magicCache(code, slowCode, ...vars) {
+  const shasum = crypto.createHash("sha1");
+  const hash = shasum.update(JSON.stringify(vars)).digest("hex");
+  let value = myCache.get(hash);
+  if (value) {
+    console.warn("magic-cache", "HIT", hash);
+    return value;
+  }
+
+  // console.log('magic', vars)
+  value = await slowCode(...vars);
+  myCache.put(hash, value);
+  return value;
 }
 
 async function getFiles(imagePath) {
@@ -60,5 +83,5 @@ async function getFiles(imagePath) {
   // });
   // return files;
 
-  return readdir.async(imagePath);
+  return magicCache("getFiles", () => readdir.async(imagePath), imagePath);
 }
