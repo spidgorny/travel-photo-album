@@ -21,26 +21,10 @@ export default function Home({ sections }) {
 			</Head>
 
 			<div className="bg-dark text-light">
-				<Container className="d-flex">
+				<Container className="d-flex" fluid="md">
 					<div className="flex-grow-0" style={{ width: "25%" }}>
 						<h4>Travel Photo Album</h4>
-						<Nav variant="pills">
-							{sections.map((x, index) => (
-								<Nav.Link
-									key={index}
-									className={index === sectionId ? "active text-light" : ""}
-									as={"li"}
-								>
-									<Link href={`?section=${index}`}>
-										<a
-											className={index === sectionId ? "active text-light" : ""}
-										>
-											{x.name}
-										</a>
-									</Link>
-								</Nav.Link>
-							))}
-						</Nav>
+						<SectionsNav sections={sections} sectionId={sectionId} />
 					</div>
 					<div className="flex-grow-1" style={{ width: "75%" }}>
 						{sectionId >= 0 && (
@@ -48,20 +32,25 @@ export default function Home({ sections }) {
 						)}
 					</div>
 				</Container>
-			</div>
 
-			<footer className={styles.footer}>
-				<a
-					href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-					target="_blank"
-					rel="noopener noreferrer"
-				>
-					Powered by{" "}
-					<span className={styles.logo}>
-						<Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-					</span>
-				</a>
-			</footer>
+				<footer className={styles.footer}>
+					<a
+						href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						Powered by{" "}
+						<span className={styles.logo}>
+							<Image
+								src="/vercel.svg"
+								alt="Vercel Logo"
+								width={72}
+								height={16}
+							/>
+						</span>
+					</a>
+				</footer>
+			</div>
 		</>
 	);
 }
@@ -72,4 +61,23 @@ export function getServerSideProps() {
 			sections: config.sections,
 		},
 	};
+}
+
+function SectionsNav({ sections, sectionId }) {
+	return (
+		<ul>
+			{sections.map((x, index) => (
+				<li
+					key={index}
+					className={index === sectionId ? "active text-light" : ""}
+				>
+					<Link href={`?section=${index}`}>
+						<a className={index === sectionId ? "active text-light" : ""}>
+							{x.name}
+						</a>
+					</Link>
+				</li>
+			))}
+		</ul>
+	);
 }

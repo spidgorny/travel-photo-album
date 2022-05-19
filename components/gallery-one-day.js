@@ -40,7 +40,9 @@ export function GalleryOneDay({ sectionId, date }) {
 		async function fetchDimensions() {
 			for (let [index, img] of photos.entries()) {
 				console.log("dimensions", dimensions.length);
-				const { data } = await axios.get(`/api/exif/${sectionId}/${img.path}`);
+				const { data } = await axios.get(
+					`/api/meta/${sectionId}/${img.dirPath}`
+				);
 				if (data) {
 					const newDim = [...photos.map((x, index) => dimensions[index] ?? x)];
 					newDim[index] = {

@@ -5,12 +5,21 @@
       "path": "c:/"
     },
     {
-      "name": "P",
-      "path": "/media/nas/photo/"
+      "name": "P:/Digital Photo",
+      "linuxPath": "/media/nas/photo/Digital Photo",
+      "pathWindows": "P:/Digital Photo",
+      "path": "/media/nas/photo/Digital Photo",
+      "thumbPath": "./data/Digital_Photo"
     },
     {
       "name": "Marina 1+ 5t 2022-04",
-      "path": "/media/nas/photo/Photos/2022/Marina-5t/2022-04"
+      "path": "/media/nas/photo/Photos/2022/Marina-5t/2022-04",
+      "thumbPath": "./data/synology-photos/2022/Marina-5t/2022-04"
+    },
+    {
+      "name": "P:/Photos",
+      "path": "/media/nas/photo/Photos",
+      "thumbPath": "./data/synology-photos"
     },
     {
       "name": "DJI Drone",

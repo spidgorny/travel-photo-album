@@ -12,7 +12,8 @@ export function GalleryFor({ sectionId, section }) {
 		return <Loading />;
 	}
 
-	const dates = Object.entries(data?.dates).slice(0, 2);
+	let dates = Object.entries(data?.dates);
+	// dates = dates.slice(0, 2);
 	const isSSR = typeof window === "undefined";
 
 	return (
