@@ -3,8 +3,8 @@ import useSWR from "swr";
 import { Loading } from "./widget/loading.js";
 import { GalleryOneDay } from "./gallery-one-day";
 
-export function GalleryFor({ sectionId, section }) {
-	let apiUrl = `/api/dates/${sectionId}`;
+export function GalleryFor({ section, folder }) {
+	let apiUrl = `/api/dates/${section.id}/${folder}`;
 	console.log({ apiUrl });
 	const { data } = useSWR(apiUrl, fetcher);
 
@@ -23,7 +23,7 @@ export function GalleryFor({ sectionId, section }) {
 					<h3>
 						{date} ({count})
 					</h3>
-					{!isSSR && <GalleryOneDay sectionId={sectionId} date={date} />}
+					{!isSSR && <GalleryOneDay sectionId={section.id} date={date} />}
 					<hr />
 				</div>
 			))}
