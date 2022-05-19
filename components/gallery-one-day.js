@@ -28,8 +28,8 @@ export function GalleryOneDay({ sectionId, date }) {
 			data?.files?.map((x) => ({
 				...x,
 				src: `/api/photo/${sectionId}/${x.path}`,
-				width: 4,
-				height: 3,
+				width: 3,
+				height: 2,
 				caption: x.path.split("/").slice(-1)[0],
 			})) ?? [],
 		[data]
@@ -57,8 +57,17 @@ export function GalleryOneDay({ sectionId, date }) {
 		fetchDimensions();
 	}, [photos]);
 
-	const imageRenderer = useCallback(
-		({ index, left, top, key, photo }) => (
+	const imageRenderer = useCallback(({ index, left, top, key, photo }) => {
+		// caption: "IMG_20220406_142852.jpg"
+		// date: "2022-04-05T22:00:00.000Z"
+		// dirPath: "IMG_20220406_142852.jpg"
+		// fullPath: "\\media\\nas\\photo\\Photos\\2022\\Marina-5t\\2022-04\\IMG_20220406_142852.jpg"
+		// height: 240.35087719298244
+		// path: "IMG_20220406_142852.jpg"
+		// src: "/api/photo/2/IMG_20220406_142852.jpg"
+		// width: 319.7
+		// console.log(photo);
+		return (
 			<SelectedImage
 				// selected={selectAll ? true : false}
 				key={key}
@@ -69,9 +78,8 @@ export function GalleryOneDay({ sectionId, date }) {
 				top={top}
 				onClick={openLightbox}
 			/>
-		),
-		[]
-	);
+		);
+	}, []);
 
 	if (!data) {
 		return <Loading />;

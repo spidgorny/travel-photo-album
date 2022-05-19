@@ -57,7 +57,11 @@ async function getMetaByJson(section, filePath) {
 		let fileBaseName = path.basename(fullPath);
 		const fileMeta = dirMeta[fileBaseName];
 		console.log({ keys: Object.keys(dirMeta), fileBaseName, fileMeta });
-		return fileMeta;
+		return {
+			...fileMeta,
+			width: fileMeta.COMPUTED.Width,
+			height: fileMeta.COMPUTED.Height,
+		};
 	} catch (e) {
 		console.error(e);
 		return null;
