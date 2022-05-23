@@ -9,6 +9,8 @@ import { ThumbQueue } from "../../../lib/thumb-queue.mjs";
 import { error } from "next/dist/build/output/log";
 import invariant from "tiny-invariant";
 
+import FfmpegCommand from "fluent-ffmpeg";
+
 export default async function handler(req, res) {
 	let [sectionId, ...filePath] = req.query.path;
 	try {
@@ -71,14 +73,14 @@ async function getMetaByJson(section, filePath) {
 	}
 }
 
+// we get metadata from the original file, not the thumbnail
 async function getMetaByFile(section, filePath) {
-	// we get metadata from the original file, not the thumbnail
+	if (isVideo(filePath.join("/"))) {
+		return getVideoMeta(section, filePath);
+	}
 	let fullPath = joinSectionPath(section.path, filePath);
 	// const path = '//' + req.query.path.join('/');
 	console.log("getMetaByFile", fullPath);
-	if (fullPath.toLowerCase().endsWith("mp4")) {
-		throw new Error("MP4 preview");
-	}
 	const mimeType = mime.lookup(fullPath);
 	// console.log(mimeType);
 
@@ -100,4 +102,36 @@ async function getMetaByFile(section, filePath) {
 	await q.enqueue({ action: "get-meta-for-file", section, filePath, metaData });
 
 	return metaData;
+}
+
+function isVideo(fullPath) {
+	return fullPath.toLowerCase().endsWith("mp4");
+}
+
+async function getVideoMeta(section, filePath) {
+	return new Promise((resolve, reject) => {
+		let fullPath = joinSectionPath(section.path, filePath);
+		FfmpegCommand.ffprobe(fullPath, async (err, data) => {
+			if (err) {
+				reject(err);
+			}
+
+			const q = new ThumbQueue();
+			await q.enqueue({
+				action: "store-meta-for-video",
+				section,
+				filePath,
+				data,
+			});
+
+			const videoStream = data.streams.find((x) => x.codec_type === "video");
+			resolve({
+				...data,
+				COMPUTED: {
+					width: videoStream.width,
+					height: videoStream.height,
+				},
+			});
+		});
+	});
 }

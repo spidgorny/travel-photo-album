@@ -75,7 +75,9 @@ export function GalleryOneDay({ sectionId, folder, date }) {
 					console.log(data, newDim);
 				}
 				setDimensions((old) => [
-					...old.map((x, i) => (i === index ? newDim : x)),
+					...(old.length ? old : photos).map((x, i) =>
+						i === index ? newDim : x
+					),
 				]);
 			}
 		}
