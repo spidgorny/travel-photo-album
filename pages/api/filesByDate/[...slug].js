@@ -3,7 +3,6 @@ import { isValidDate } from "../../../lib/date.mjs";
 import { DateTime } from "luxon";
 import config from "../../../config.json";
 import { getFileDates } from "../../../lib/files.mjs";
-import path from "path";
 
 export default async function handler(req, res) {
 	try {
