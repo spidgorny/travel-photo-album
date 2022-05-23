@@ -23,7 +23,9 @@ export function GalleryFor({ section, folder }) {
 					<h3>
 						{date} ({count})
 					</h3>
-					{!isSSR && <GalleryOneDay sectionId={section.id} date={date} />}
+					{!isSSR && (
+						<GalleryOneDay sectionId={section.id} folder={folder} date={date} />
+					)}
 					<hr />
 				</div>
 			))}

@@ -10,9 +10,10 @@ import { error } from "next/dist/build/output/log";
 import invariant from "tiny-invariant";
 
 export default async function handler(req, res) {
+	let [sectionId, ...filePath] = req.query.path;
 	try {
-		let [sectionId, ...filePath] = req.query.path;
 		const section = config.sections[sectionId];
+		invariant(section, "section");
 
 		let metaData = await getMetaByJson(section, filePath);
 		if (!metaData) {
@@ -35,6 +36,8 @@ export default async function handler(req, res) {
 			});
 		}
 		res.status(500).json({
+			sectionId,
+			filePath: filePath.join("/"),
 			status: "error",
 			message: e.message,
 			stack: e.stack.split("\n"),

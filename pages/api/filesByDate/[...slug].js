@@ -6,7 +6,8 @@ import { getFileDates } from "../../../lib/files.mjs";
 
 export default async function handler(req, res) {
 	try {
-		let [sectionInput, date, ...filePath] = req.query.slug;
+		let [sectionInput, ...filePath] = req.query.slug;
+		let date = filePath.pop(); // last part is a date
 		const sectionId = Number(sectionInput ?? req.query.section);
 		const section = config.sections[sectionId];
 		invariant(section);

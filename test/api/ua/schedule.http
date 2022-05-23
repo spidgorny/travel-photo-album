@@ -1,0 +1,2 @@
+GET https://online.mfa.gov.ua/api/v1/queue/consulates/126/schedule?date=2022-05-23&dateEnd=2022-05-23&serviceId=1945
+authorization: Bearer eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJ2YXJpYW50IjoiZWI0NWIwMDMzZjJjNjJiMzk1MjhlODBhNTQzNTZiOTMiLCJpYXQiOjE2NTMyOTUzMDYsImV4cCI6NTU0MTI5NTMwNn0.P61hp4yPKwgep3EHxTVSEoGP5kjKU-WB6HWIFJ7b0OoRotWatQUMfYvId0JLF53YVFDBJOHlWsOU-H0CP_RKgQ
