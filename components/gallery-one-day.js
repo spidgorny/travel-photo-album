@@ -29,7 +29,15 @@ export function GalleryOneDay({ sectionId, folder, date }) {
 		console.log("remap photos", date);
 		return (
 			data?.files?.map((x) => {
-				let src = `/api/photo/${sectionId}/${folder}/${x.path}`;
+				const isVideo = x.path.endsWith("mp4");
+
+				let src;
+				if (isVideo) {
+					src = `/api/photo/${sectionId}/${folder}/${x.path}`; // <img src="a.mp4"/> is not good
+				} else {
+					src = `/api/photo/${sectionId}/${folder}/${x.path}`;
+				}
+
 				let thumbSrc = `/api/thumb/${sectionId}/${folder}/${x.path}`;
 				return {
 					...x,
@@ -162,7 +170,7 @@ function SelectedImage(props) {
 			style={{ margin, height: photo.height + 30, width: photo.width, ...cont }}
 			className={!selected ? "not-selected" : ""}
 		>
-			<Image
+			<img
 				src={photo.source.regular}
 				title={photo.title ?? photo.caption}
 				alt={photo.title ?? photo.caption}
