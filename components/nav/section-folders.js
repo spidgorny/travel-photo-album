@@ -31,10 +31,9 @@ export function SubFolders({ section, thePath }) {
 				const isActive = folder.includes(pathJoined);
 				return (
 					<li key={x.path} className={isActive ? "active" : ""}>
-						<Link href={`/?section=${section.id}&folder=${pathJoined}`}>
-							<a key={x.path} className={isActive ? "active text-white" : ""}>
+						<Link href={`/?section=${section.id}&folder=${pathJoined}`} key={x.path} className={isActive ? "active" +
+							" text-white" : ""}>
 								{x.path}
-							</a>
 						</Link>
 						<SubFolders section={section} thePath={pathJoined} />
 					</li>

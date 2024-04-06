@@ -8,10 +8,8 @@ export function SectionsNav({ sections, sectionId }) {
 					key={index}
 					className={index === sectionId ? "active text-light" : ""}
 				>
-					<Link href={`?section=${index}`}>
-						<a className={index === sectionId ? "active text-light" : ""}>
+					<Link href={`?section=${index}`} className={index === sectionId ? "active text-light" : ""}>
 							{x.name}
-						</a>
 					</Link>
 				</li>
 			))}

@@ -5,7 +5,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { Container } from "react-bootstrap";
 import config from "../config.json";
 import { GalleryFor } from "../components/gallery.js";
-import { useRouter } from "next/router.js";
+import { useRouter } from "next/router";
 import { SectionsNav } from "../components/nav/sections-nav";
 import { SectionFolders } from "../components/nav/section-folders";
 
