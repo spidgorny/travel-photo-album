@@ -2,10 +2,10 @@
 import path from "path";
 import readdir from "@jsdevtools/readdir-enhanced";
 import fs from "fs";
-import { magicCache } from "./cache";
+import { magicCache } from "./cache.ts";
 import invariant from "tiny-invariant";
-import type { ConfigSection } from "./config";
-import type { DatedFileEntry, FilteredFileEntry } from "./files-types";
+import type { ConfigSection } from "./config.ts";
+import type { DatedFileEntry, FilteredFileEntry } from "./files-types.ts";
 
 export function joinSectionPath(
 	sectionPath: string,

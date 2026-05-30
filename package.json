@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "warmup:thumbs": "node scripts/warmup-thumbnails.ts"
+    "warmup:thumbs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/warmup-thumbnails.ts"
   },
   "dependencies": {
     "@jsdevtools/readdir-enhanced": "^6.0.4",

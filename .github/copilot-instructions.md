@@ -12,14 +12,14 @@
 
 ## High-level architecture
 
-- This is a Next.js **Pages Router** app. `pages/index.js` reads normalized section data from `lib/config.js` on the server and turns `config.sections` into the section list used by the UI.
+- This is a Next.js **App Router** app. `app/page.tsx` reads normalized section data from `lib/config.js` on the server and passes `config.sections` into the colocated client UI under `app/_components/`.
 - The main UI flow is query-string driven:
   - `section` selects an entry from `config.sections`
   - `folder` selects a nested folder within that section
-  - `components/nav/section-folders.js` recursively loads folder data from `/api/files/...`
-  - `components/gallery.js` loads grouped dates from `/api/dates/...`
-  - `components/gallery-one-day.js` loads files for a single date from `/api/filesByDate/...` and then fetches per-file metadata from `/api/meta/...`
-- The API routes in `pages/api/**` are thin filesystem adapters over helpers in `lib/files.mjs`:
+  - `app/_components/nav/section-folders.tsx` recursively loads folder data from `/api/files/...`
+  - `app/_components/gallery.tsx` loads grouped dates from `/api/dates/...`
+  - `app/_components/gallery-one-day.tsx` loads files for a single date from `/api/filesByDate/...` and then fetches per-file metadata from `/api/meta/...`
+- The route handlers in `app/api/**` are thin filesystem adapters over helpers in `lib/files.mjs`:
   - `/api/files` lists directories/files for navigation
   - `/api/dates` groups visible files by day
   - `/api/filesByDate` returns the files for one day

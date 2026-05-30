@@ -1,7 +1,6 @@
-import type { NextApiRequest } from "next";
 import type { ConfigSection } from "./config";
 
-export type CatchAllQueryValue = NextApiRequest["query"][string];
+export type CatchAllQueryValue = string | string[] | undefined | null;
 
 export interface ApiErrorPayload {
 status: "error";
@@ -21,7 +20,11 @@ return [];
 }
 
 export function getFirstQueryValue(value: CatchAllQueryValue): string | undefined {
-return Array.isArray(value) ? value[0] : value;
+if (Array.isArray(value)) {
+	return value[0];
+}
+
+return typeof value === "string" ? value : undefined;
 }
 
 export function getNumericSectionId(

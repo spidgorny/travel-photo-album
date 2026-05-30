@@ -5,9 +5,10 @@ import path from "path";
 import sizeOf from "image-size";
 import mime from "mime-types";
 import sharp from "sharp";
+import FfmpegCommand from "fluent-ffmpeg";
 import invariant from "tiny-invariant";
 import { createClient } from "redis";
-import { joinSectionPath } from "./files";
+import { joinSectionPath } from "./files.ts";
 
 const thumbKvUrl = process.env.THUMB_KV_URL?.trim() || process.env.REDIS_URL?.trim();
 const thumbKvPrefix =
@@ -377,5 +378,111 @@ export async function ensureImageThumb(
 	return {
 		...thumb,
 		source: "generated",
+	};
+}
+
+function getThumbFilePath(thumbRoot, filePath, replaceExt = null) {
+	let thumbPath = joinSectionPath(thumbRoot, filePath);
+	if (replaceExt) {
+		thumbPath = thumbPath.replace(path.extname(thumbPath), replaceExt);
+	}
+	return thumbPath;
+}
+
+function getExistingDiskThumb(thumbRoot, filePath, candidates = [null]) {
+	for (const candidateExt of candidates) {
+		const thumbPath = getThumbFilePath(thumbRoot, filePath, candidateExt);
+		try {
+			fs.accessSync(thumbPath, fs.constants.R_OK);
+			return {
+				path: thumbPath,
+				mimeType: mime.lookup(thumbPath) || "application/octet-stream",
+				source: `existing:${candidateExt ?? (path.extname(thumbPath) || "original")}`,
+			};
+		} catch {}
+	}
+	return null;
+}
+
+async function ensureResizedImageThumb(section, filePath) {
+	invariant(section.path, "section.path");
+	invariant(section.thumbPath, "section.thumbPath");
+	const existing = getExistingDiskThumb(section.thumbPath, filePath, [null, ".webp"]);
+	if (existing) {
+		return existing;
+	}
+
+	const largeFile = joinSectionPath(section.path, filePath);
+	const thumbFile = getThumbFilePath(section.thumbPath, filePath);
+	fs.mkdirSync(path.dirname(thumbFile), { recursive: true });
+	await sharp(largeFile).resize({ width: thumbnailTargetWidth }).toFile(thumbFile);
+	return {
+		path: thumbFile,
+		mimeType: mime.lookup(thumbFile) || "application/octet-stream",
+		source: "generated:resize",
+	};
+}
+
+async function ensureVideoThumb(section, filePath) {
+	invariant(section.path, "section.path");
+	invariant(section.thumbPath, "section.thumbPath");
+	const existing = getExistingDiskThumb(section.thumbPath, filePath, [
+		".webp",
+		".jpg",
+		".jpeg",
+		null,
+	]);
+	if (existing) {
+		return existing;
+	}
+
+	const fullPath = joinSectionPath(section.path, filePath);
+	const thumbPath = getThumbFilePath(section.thumbPath, filePath, ".jpg");
+	fs.mkdirSync(path.dirname(thumbPath), { recursive: true });
+
+	await new Promise((resolve, reject) => {
+		new FfmpegCommand(fullPath)
+			.screenshots({
+				count: 1,
+				folder: path.dirname(thumbPath),
+				filename: path.basename(thumbPath),
+				size: "320x240",
+				timestamps: ["50%"],
+			})
+			.on("end", resolve)
+			.on("error", reject);
+	});
+
+	return {
+		path: thumbPath,
+		mimeType: mime.lookup(thumbPath) || "image/jpeg",
+		source: "generated:ffmpeg",
+	};
+}
+
+export async function ensureSectionThumb(
+	sectionId,
+	section,
+	filePath,
+	variant = `w${thumbnailTargetWidth}-jpeg`,
+) {
+	if (isVideoPath(filePath)) {
+		invariant(section.thumbPath, "section.thumbPath is required for video thumbnails");
+		return {
+			kind: "file",
+			...(await ensureVideoThumb(section, filePath)),
+		};
+	}
+
+	if (!section.thumbPath) {
+		return {
+			kind: "buffer",
+			...(await ensureImageThumb(sectionId, section, filePath, variant)),
+		};
+	}
+
+	return {
+		kind: "file",
+		...(await ensureResizedImageThumb(section, filePath)),
 	};
 }

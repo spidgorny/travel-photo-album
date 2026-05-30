@@ -29,19 +29,18 @@ Restart Kvrocks automatically when its critical config changes:
 docker compose watch kvrocks
 ```
 
-Warm a section or folder ahead of browsing:
+Warm an entire collection, including all nested folders, ahead of browsing:
 
 ```bash
 npm run warmup:thumbs -- 5
-npm run warmup:thumbs -- 5 2022/marina-5t/2022-04-more
-npm run warmup:thumbs -- 5 2022/marina-5t/2022-04-more 2022-04-24
+npm run warmup:thumbs -- "P:/Photos"
 ```
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+You can start editing the main gallery UI in `app/page.tsx` and the colocated client components under `app/_components/`. The page auto-updates as you edit the file.
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+[Route handlers](https://nextjs.org/docs/app/building-your-application/routing/route-handlers) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `app/api/hello/route.ts`.
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+The `app/api` directory is mapped to `/api/*`. Files in this directory are treated as [route handlers](https://nextjs.org/docs/app/building-your-application/routing/route-handlers).
 
 ## Learn More
 
