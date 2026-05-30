@@ -307,9 +307,11 @@ function getDimensionsFromFile(section, filePath) {
 	invariant(section.path, "section.path");
 	const fullPath = joinSectionPath(section.path, filePath);
 	const dimensions = sizeOf(fs.readFileSync(fullPath));
+	const orientation = dimensions.orientation;
+	const shouldSwapSides = orientation && orientation >= 5 && orientation <= 8;
 	return {
-		width: dimensions.width ?? 3,
-		height: dimensions.height ?? 2,
+		width: shouldSwapSides ? (dimensions.height ?? 2) : (dimensions.width ?? 3),
+		height: shouldSwapSides ? (dimensions.width ?? 3) : (dimensions.height ?? 2),
 		mimeType: mime.lookup(fullPath) || null,
 		dominantColor: null,
 	};
@@ -378,6 +380,7 @@ export async function ensureImageThumb(
 	const fullPath = joinSectionPath(section.path, filePath);
 	const dimensions = await getImageDimensions(sectionId, section, filePath, variant);
 	const buffer = await sharp(fullPath)
+		.rotate()
 		.resize({ width: thumbnailTargetWidth })
 		.jpeg()
 		.toBuffer();
@@ -419,6 +422,16 @@ function getExistingDiskThumb(thumbRoot, filePath, candidates = [null]) {
 	return null;
 }
 
+export async function hasStoredSectionThumb(sectionId, section, filePath, variant) {
+	if (!section.thumbPath) {
+		const existing = await getStoredThumb(sectionId, filePath, variant);
+		return Boolean(existing);
+	}
+
+	const candidates = isVideoPath(filePath) ? [".webp", ".jpg", ".jpeg", null] : [null, ".webp"];
+	return Boolean(getExistingDiskThumb(section.thumbPath, filePath, candidates));
+}
+
 async function ensureResizedImageThumb(section, filePath) {
 	invariant(section.path, "section.path");
 	invariant(section.thumbPath, "section.thumbPath");
@@ -430,7 +443,7 @@ async function ensureResizedImageThumb(section, filePath) {
 	const largeFile = joinSectionPath(section.path, filePath);
 	const thumbFile = getThumbFilePath(section.thumbPath, filePath);
 	fs.mkdirSync(path.dirname(thumbFile), { recursive: true });
-	await sharp(largeFile).resize({ width: thumbnailTargetWidth }).toFile(thumbFile);
+	await sharp(largeFile).rotate().resize({ width: thumbnailTargetWidth }).toFile(thumbFile);
 	return {
 		path: thumbFile,
 		mimeType: mime.lookup(thumbFile) || "application/octet-stream",

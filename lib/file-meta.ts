@@ -4,6 +4,7 @@ import path from "path";
 import exifr from "exifr";
 import sizeOf from "image-size";
 import mime from "mime-types";
+import sharp from "sharp";
 import { getNearestCity } from "offline-geocode-city";
 import invariant from "tiny-invariant";
 import type { ConfigSection } from "./config.ts";
@@ -115,8 +116,7 @@ export async function buildImageMetaData(
 ): Promise<ThumbImageMetaData> {
 	invariant(section.path, "section.path");
 	const fullPath = joinSectionPath(section.path, filePath);
-	const fileBuffer = fs.readFileSync(fullPath);
-	const dimensions = sizeOf(fileBuffer);
+	const dimensions = await getImageDimensions(fullPath);
 	const gps = await extractGpsCoordinates(fullPath);
 	const location = gps ? reverseGeocodeLocation(gps) : null;
 
@@ -132,6 +132,47 @@ export async function buildImageMetaData(
 		...(gps ? { GPS: gps } : {}),
 		...(location ? { location } : {}),
 	};
+}
+
+export async function hasExifOrientationTransform(
+	section: ConfigSection,
+	filePath: string[],
+): Promise<boolean> {
+	invariant(section.path, "section.path");
+	const fullPath = joinSectionPath(section.path, filePath);
+	try {
+		const metadata = await sharp(fullPath).metadata();
+		return (metadata.orientation ?? 1) > 1;
+	} catch {
+		return false;
+	}
+}
+
+async function getImageDimensions(fullPath: string) {
+	try {
+		const metadata = await sharp(fullPath).metadata();
+		const width = metadata.width ?? fallbackDimensions.width;
+		const height = metadata.height ?? fallbackDimensions.height;
+		const orientation = metadata.orientation;
+		const shouldSwapSides = orientation !== undefined && orientation >= 5 && orientation <= 8;
+		return {
+			width: shouldSwapSides ? height : width,
+			height: shouldSwapSides ? width : height,
+		};
+	} catch {
+		const fileBuffer = fs.readFileSync(fullPath);
+		const dimensions = sizeOf(fileBuffer);
+		const orientation = dimensions.orientation;
+		const shouldSwapSides = orientation !== undefined && orientation >= 5 && orientation <= 8;
+		return {
+			width: shouldSwapSides
+				? (dimensions.height ?? fallbackDimensions.height)
+				: (dimensions.width ?? fallbackDimensions.width),
+			height: shouldSwapSides
+				? (dimensions.width ?? fallbackDimensions.width)
+				: (dimensions.height ?? fallbackDimensions.height),
+		};
+	}
 }
 
 export function buildBasicFileMetaData(

@@ -3,7 +3,11 @@ import crypto from "crypto";
 import { Queue } from "bullmq";
 import invariant from "tiny-invariant";
 import config from "./config.ts";
-import { buildImageMetaData, writeStoredMetaForFile } from "./file-meta.ts";
+import {
+	buildImageMetaData,
+	readStoredMetaForFile,
+	writeStoredMetaForFile,
+} from "./file-meta.ts";
 import {
 thumbJobActions,
 thumbQueueName,
@@ -13,6 +17,7 @@ thumbQueueUrl,
 import {
 ensureSectionThumb,
 getMediaKind,
+hasStoredSectionThumb,
 isVideoPath,
 thumbnailTargetWidth,
 } from "./thumb-store.ts";
@@ -179,11 +184,26 @@ return {
 	reason: "unsupported-media",
 };
 }
+const variant = getEnsureSectionThumbVariant(payload);
+if (!(payload?.force ?? false)) {
+	const [hasThumb, storedMeta] = await Promise.all([
+		hasStoredSectionThumb(sectionId, section, filePath, variant),
+		readStoredMetaForFile(section, filePath),
+	]);
+	if (hasThumb && storedMeta) {
+		return {
+			action: mediaJobNames.warmSectionFile,
+			filePath: filePath.join("/"),
+			skipped: true,
+			reason: "already-indexed",
+		};
+	}
+}
 const thumb = await ensureSectionThumb(
 sectionId,
 section,
 filePath,
-getEnsureSectionThumbVariant(payload),
+variant,
 );
 if (mediaKind === "image" && !isVideoPath(filePath)) {
 const metaData = await buildImageMetaData(section, filePath);

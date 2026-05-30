@@ -34,6 +34,7 @@ export interface GetMetaForFileJob {
 	section?: ConfigSection;
 	filePath: string[];
 	metaData: ThumbImageMetaData;
+	force?: boolean;
 }
 
 export interface StoreMetaForVideoJob {
@@ -42,6 +43,7 @@ export interface StoreMetaForVideoJob {
 	section?: ConfigSection;
 	filePath: string[];
 	data: FfprobeData;
+	force?: boolean;
 }
 
 export interface WarmSectionFileJob {
@@ -50,6 +52,7 @@ export interface WarmSectionFileJob {
 	section?: ConfigSection;
 	filePath: string[];
 	variant?: string;
+	force?: boolean;
 }
 
 export type ThumbJobData = GetMetaForFileJob | StoreMetaForVideoJob | WarmSectionFileJob;

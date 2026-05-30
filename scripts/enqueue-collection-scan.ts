@@ -8,6 +8,10 @@ import { closeRedisClient } from "../lib/cache.ts";
 import config from "../lib/config.ts";
 import { joinSectionPath } from "../lib/files.ts";
 import {
+hasExifOrientationTransform,
+readStoredMetaForFile,
+} from "../lib/file-meta.ts";
+import {
 buildMediaJobId,
 createMediaQueue,
 getEnsureSectionThumbVariant,
@@ -15,15 +19,19 @@ mediaJobNames,
 } from "../lib/media-worker.ts";
 import { serializeSectionForWorker } from "../lib/thumb-jobs.ts";
 import { validateBullMqConnection } from "../lib/thumb-queue.ts";
-import { closeThumbKvClient, isVideoPath } from "../lib/thumb-store.ts";
+import {
+	closeThumbKvClient,
+	hasStoredSectionThumb,
+	isVideoPath,
+} from "../lib/thumb-store.ts";
 
 const batchSize = 250;
 
 async function main() {
 const startedAt = Date.now();
-const [collectionInput] = process.argv.slice(2);
-if (!collectionInput || collectionInput === "--help" || collectionInput === "-h") {
-console.log("Usage: npm run queue:scan -- <collection-id-or-name>");
+const { collectionInput, force, forceRotated } = parseArgs(process.argv.slice(2));
+if (!collectionInput) {
+console.log("Usage: npm run queue:scan -- <collection-id-or-name> [--force] [--force-rotated]");
 return;
 }
 
@@ -43,6 +51,7 @@ const scanStats = { directories: 0, files: 0 };
 let enqueued = 0;
 let skipped = 0;
 const batchEntries = [];
+const variant = getEnsureSectionThumbVariant({});
 
 await scanCollectionFiles(section, [], scanStats, async (filePath) => {
 const fullPath = joinSectionPath(section.path, filePath);
@@ -52,11 +61,17 @@ if (!isMedia) {
 skipped += 1;
 return;
 }
+const indexState = await getIndexState(sectionId, section, filePath, variant, force, forceRotated);
+if (!indexState.shouldEnqueue) {
+skipped += 1;
+return;
+}
 const payload = {
 sectionId,
 section: serializeSectionForWorker(section),
 filePath,
-variant: getEnsureSectionThumbVariant({}),
+variant,
+force: indexState.force,
 };
 batchEntries.push({
 name: mediaJobNames.warmSectionFile,
@@ -100,13 +115,57 @@ invariant(Number.isInteger(sectionId), "collection id must be an integer");
 invariant(config.sections?.[sectionId], "section not found");
 return sectionId;
 }
-
 const normalizedInput = collectionInput.trim().toLowerCase();
 const sectionId = config.sections.findIndex(
 (section) => section?.name?.trim().toLowerCase() === normalizedInput,
 );
 invariant(sectionId >= 0, `section not found: ${collectionInput}`);
 return sectionId;
+}
+
+function parseArgs(args) {
+const force = args.includes("--force");
+const forceRotated = args.includes("--force-rotated");
+const collectionInput = args.find(
+(argument) =>
+argument !== "--force" &&
+argument !== "--force-rotated" &&
+argument !== "--help" &&
+argument !== "-h",
+);
+return { collectionInput, force, forceRotated };
+}
+
+async function getIndexState(sectionId, section, filePath, variant, force, forceRotated) {
+if (force) {
+return { shouldEnqueue: true, reason: "force", force: true };
+}
+
+if (forceRotated && !isVideoPath(filePath)) {
+const shouldReindexRotated = await hasExifOrientationTransform(section, filePath);
+if (shouldReindexRotated) {
+return { shouldEnqueue: true, reason: "force-rotated", force: true };
+}
+}
+
+const [hasThumb, storedMeta] = await Promise.all([
+hasStoredSectionThumb(sectionId, section, filePath, variant),
+readStoredMetaForFile(section, filePath),
+]);
+
+if (hasThumb && storedMeta) {
+return { shouldEnqueue: false, reason: "already-indexed", force: false };
+}
+
+if (!hasThumb && !storedMeta) {
+return { shouldEnqueue: true, reason: "missing-thumb-and-metadata", force: false };
+}
+
+return {
+shouldEnqueue: true,
+reason: hasThumb ? "missing-metadata" : "missing-thumbnail",
+force: false,
+};
 }
 
 async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {

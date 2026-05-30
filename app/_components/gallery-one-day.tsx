@@ -40,6 +40,7 @@ type PhotoGalleryComponentProps = {
 	photos: GalleryPhoto[];
 	direction?: "row" | "column";
 	margin?: number;
+	columns?: number | ((containerWidth: number) => number);
 	targetRowHeight?: number;
 	onClick: (_event: MouseEvent<HTMLElement>, args: LightboxArgs) => void;
 	renderImage: (props: ImageRendererProps) => ReactNode;
@@ -200,9 +201,15 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 			{!!dimensions.length && (
 				<PhotoGallery
 					photos={dimensions}
-					direction="row"
+					direction="column"
+					columns={(containerWidth) => {
+						if (containerWidth >= 1800) return 6;
+						if (containerWidth >= 1400) return 5;
+						if (containerWidth >= 1000) return 4;
+						if (containerWidth >= 700) return 3;
+						return 2;
+					}}
 					margin={2}
-					targetRowHeight={300}
 					onClick={openLightbox}
 					renderImage={imageRenderer}
 				/>
@@ -210,12 +217,12 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 			{viewerIsOpen && currentPhoto && typeof document !== "undefined"
 				? createPortal(
 						<div
-							className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm"
+							className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-1 backdrop-blur-sm"
 							onClick={closeLightbox}
 							role="presentation"
 						>
 							<div
-								className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 shadow-2xl shadow-black/50"
+								className="relative flex h-[98vh] w-[98%] max-w-none flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 shadow-2xl shadow-black/50"
 								onClick={(event) => event.stopPropagation()}
 								role="dialog"
 								aria-modal="true"
@@ -239,7 +246,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 									</button>
 								</div>
 								<div
-									className="relative flex min-h-[60vh] items-center justify-center bg-slate-950/80 p-4 sm:p-6"
+									className="relative flex min-h-0 flex-1 items-center justify-center bg-slate-950/80 p-2 sm:p-3"
 									onWheel={handleViewerWheel}
 								>
 									{currentImage > 0 ? (
@@ -252,11 +259,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 											Prev
 										</button>
 									) : null}
-									<img
-										src={currentPhoto.source.fullscreen ?? currentPhoto.source.regular}
-										alt={currentPhoto.title ?? currentPhoto.caption}
-										className="max-h-[78vh] w-auto max-w-full rounded-2xl object-contain"
-									/>
+									<FullscreenImage photo={currentPhoto} />
 									{currentImage < dimensions.length - 1 ? (
 										<button
 											type="button"
@@ -287,7 +290,7 @@ interface SelectedImageProps {
 	onClick: (_event: MouseEvent<HTMLElement>, args: LightboxArgs) => void;
 }
 
-function SelectedImage({ index, photo, margin, selected, onClick }: SelectedImageProps) {
+function SelectedImage({ index, photo, margin, left, top, selected, onClick }: SelectedImageProps) {
 	const [isLoaded, setIsLoaded] = useState(false);
 	const fileName = photo.path.split("/").at(-1) ?? photo.caption ?? "Photo";
 	const dimensionLabel =
@@ -297,9 +300,12 @@ function SelectedImage({ index, photo, margin, selected, onClick }: SelectedImag
 	const containerStyle: CSSProperties = {
 		backgroundColor: photo.dominantColor ?? "#0f172a",
 		cursor: "pointer",
+		height: photo.height,
+		left,
 		margin,
 		overflow: "hidden",
-		position: "relative",
+		top,
+		position: "absolute",
 		width: photo.width,
 	};
 
@@ -335,6 +341,56 @@ function SelectedImage({ index, photo, margin, selected, onClick }: SelectedImag
 					{dimensionLabel ?? "Photo"}
 				</div>
 			</div>
+		</div>
+	);
+}
+
+function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
+	const [originalStatus, setOriginalStatus] = useState<"loading" | "loaded" | "error">(
+		"loading",
+	);
+
+	useEffect(() => {
+		setOriginalStatus("loading");
+	}, [photo.key, photo.source.regular]);
+
+	const fallbackSrc = photo.source.fullscreen ?? photo.source.thumbnail;
+
+	return (
+		<div
+		className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-2xl"
+			style={{ backgroundColor: photo.dominantColor ?? "#020617" }}
+		>
+			{originalStatus !== "loaded" ? (
+				<div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 bg-slate-800/80">
+					<div
+						className={[
+							"h-full transition-all duration-300",
+							originalStatus === "error"
+								? "w-full bg-red-500"
+								: "w-1/3 animate-pulse rounded-r-full bg-sky-400/90",
+						].join(" ")}
+					/>
+				</div>
+			) : null}
+			<img
+				src={fallbackSrc}
+				alt={photo.title ?? photo.caption}
+				className={[
+					"h-full w-full object-contain transition duration-300",
+					originalStatus === "loaded" ? "opacity-0" : "opacity-100",
+				].join(" ")}
+			/>
+			<img
+				src={photo.source.regular}
+				alt={photo.title ?? photo.caption}
+				onLoad={() => setOriginalStatus("loaded")}
+				onError={() => setOriginalStatus("error")}
+				className={[
+					"absolute inset-0 h-full w-full object-contain transition duration-300",
+					originalStatus === "loaded" ? "opacity-100" : "opacity-0",
+				].join(" ")}
+			/>
 		</div>
 	);
 }

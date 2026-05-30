@@ -17,8 +17,14 @@ import {
 	validateThumbQueueConnection,
 } from "../lib/thumb-queue.ts";
 import {
+	hasExifOrientationTransform,
+	readStoredMetaForFile,
+} from "../lib/file-meta.ts";
+import {
 	closeThumbKvClient,
+	hasStoredSectionThumb,
 	isVideoPath,
+	thumbnailTargetWidth,
 } from "../lib/thumb-store.ts";
 
 const ANSI_RED = "\u001b[31m";
@@ -26,9 +32,11 @@ const ANSI_RESET = "\u001b[0m";
 
 async function main() {
 	const startedAt = Date.now();
-	const [collectionInput] = process.argv.slice(2);
-	if (!collectionInput || collectionInput === "--help" || collectionInput === "-h") {
-		console.log('Usage: npm run warmup:thumbs -- <collection-id-or-name>');
+	const { collectionInput, force, forceRotated } = parseArgs(process.argv.slice(2));
+	if (!collectionInput) {
+		console.log(
+			"Usage: npm run warmup:thumbs -- <collection-id-or-name> [--force] [--force-rotated]",
+		);
 		return;
 	}
 	const sectionId = resolveCollectionId(collectionInput);
@@ -49,6 +57,7 @@ async function main() {
 	let enqueued = 0;
 	let skipped = 0;
 	let failed = 0;
+	const variant = `w${thumbnailTargetWidth}-jpeg`;
 	const queue = new ThumbQueue();
 	await scanCollectionFiles(section, [], scanStats, async (filePath, index) => {
 		const progressLabel = `[${index}]`;
@@ -64,17 +73,34 @@ async function main() {
 		}
 
 		try {
+			const indexState = await getIndexState(
+				sectionId,
+				section,
+				filePath,
+				variant,
+				force,
+				forceRotated,
+			);
+			if (!indexState.shouldEnqueue) {
+				skipped += 1;
+				console.log(`skip ${progressLabel} ${filePath.join("/")} (already indexed)`);
+				return;
+			}
 			const job = await queue.enqueue({
 				action: thumbJobActions.warmSectionFile,
 				sectionId,
 				section: serializeSectionForWorker(section),
 				filePath,
+				variant,
+				force: indexState.force,
 			});
 			if (!job) {
 				throw new Error("thumb queue is not configured");
 			}
 			enqueued += 1;
-			console.log(`queued ${progressLabel} ${filePath.join("/")} (${job.name})`);
+			console.log(
+				`queued ${progressLabel} ${filePath.join("/")} (${job.name}: ${indexState.reason})`,
+			);
 		} catch (error) {
 			failed += 1;
 			const message = error instanceof Error ? error.message : String(error);
@@ -109,6 +135,58 @@ function resolveCollectionId(collectionInput: string) {
 	);
 	invariant(sectionId >= 0, `section not found: ${collectionInput}`);
 	return sectionId;
+}
+
+function parseArgs(args: string[]) {
+	const force = args.includes("--force");
+	const forceRotated = args.includes("--force-rotated");
+	const collectionInput = args.find(
+		(argument) =>
+			argument !== "--force" &&
+			argument !== "--force-rotated" &&
+			argument !== "--help" &&
+			argument !== "-h",
+	);
+	return { collectionInput, force, forceRotated };
+}
+
+async function getIndexState(
+	sectionId: number,
+	section,
+	filePath: string[],
+	variant: string,
+	force: boolean,
+	forceRotated: boolean,
+) {
+	if (force) {
+		return { shouldEnqueue: true, reason: "force", force: true };
+	}
+
+	if (forceRotated && !isVideoPath(filePath)) {
+		const shouldReindexRotated = await hasExifOrientationTransform(section, filePath);
+		if (shouldReindexRotated) {
+			return { shouldEnqueue: true, reason: "force-rotated", force: true };
+		}
+	}
+
+	const [hasThumb, storedMeta] = await Promise.all([
+		hasStoredSectionThumb(sectionId, section, filePath, variant),
+		readStoredMetaForFile(section, filePath),
+	]);
+
+	if (hasThumb && storedMeta) {
+		return { shouldEnqueue: false, reason: "already-indexed", force: false };
+	}
+
+	if (!hasThumb && !storedMeta) {
+		return { shouldEnqueue: true, reason: "missing-thumb-and-metadata", force: false };
+	}
+
+	return {
+		shouldEnqueue: true,
+		reason: hasThumb ? "missing-metadata" : "missing-thumbnail",
+		force: false,
+	};
 }
 
 async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
