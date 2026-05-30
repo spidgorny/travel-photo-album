@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { GalleryFor } from "./gallery";
 import { InfoSidebar } from "./info-sidebar";
 import { SectionFolders } from "./nav/section-folders";
+import { QueueProgressWidget } from "./queue-progress-widget";
 import type { UISection } from "./ui-types";
 
 interface PhotoAlbumShellProps {
@@ -74,6 +75,7 @@ export function PhotoAlbumShell({
 							</p>
 						</div>
 						<div className="flex min-w-0 flex-col gap-3 lg:w-[44rem] lg:flex-row lg:items-center">
+							<QueueProgressWidget />
 							<label className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-[19rem] lg:shrink-0">
 								<div className="text-xs uppercase tracking-[0.2em] text-slate-400">
 									Travel collection
