@@ -2,7 +2,7 @@
 set -eu
 
 if ! command -v ollama >/dev/null 2>&1; then
-	node /app/docker/description-worker/install-ollama.mjs
+	OLLAMA_NO_START=1 sh -c "$(curl -fsSL https://ollama.com/install.sh)"
 fi
 
 ollama serve >/tmp/ollama.log 2>&1 &
@@ -14,7 +14,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-until node -e "fetch(process.argv[1]).then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))" "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags"; do
+until curl -sf "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/tags" >/dev/null; do
 	sleep 1
 done
 

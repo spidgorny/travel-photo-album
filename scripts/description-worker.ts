@@ -7,6 +7,7 @@ import {
 	createDescriptionQueueConnection,
 } from "../lib/description-queue.ts";
 import {
+	descriptionJobActions,
 	descriptionQueueName,
 	descriptionQueuePrefix,
 } from "../lib/description-jobs.ts";
@@ -26,6 +27,7 @@ const workerStartedAt = Date.now();
 let processedThisRun = 0;
 let totalObserved = 0;
 const concurrency = getDescriptionWorkerConcurrency();
+const activeDescriptionStartedAt = new Map();
 
 const worker = new Worker(
 	descriptionQueueName,
@@ -36,6 +38,33 @@ const worker = new Worker(
 		prefix: descriptionQueuePrefix,
 	},
 );
+
+function formatJobFilePath(filePath) {
+	if (Array.isArray(filePath)) {
+		return filePath.filter(Boolean).join("/");
+	}
+	if (typeof filePath === "string" && filePath.trim().length > 0) {
+		return filePath.trim();
+	}
+	return "unknown-file";
+}
+
+function summarizeDescription(description) {
+	if (typeof description !== "string") {
+		return "";
+	}
+	return description.replace(/\s+/g, " ").trim();
+}
+
+function formatElapsed(elapsedMilliseconds) {
+	if (!Number.isFinite(elapsedMilliseconds) || elapsedMilliseconds < 0) {
+		return "--";
+	}
+	if (elapsedMilliseconds < 1000) {
+		return `${Math.round(elapsedMilliseconds)}ms`;
+	}
+	return `${(elapsedMilliseconds / 1000).toFixed(1)}s`;
+}
 
 function getDescriptionWorkerConcurrency() {
 	const parsedConcurrency = Number(process.env.DESCRIPTION_WORKER_CONCURRENCY ?? 1);
@@ -86,7 +115,26 @@ worker.on("ready", () => {
 	});
 });
 
-worker.on("completed", () => {
+worker.on("active", (job) => {
+	const jobName = resolveDescriptionJobName(job.name, job.data);
+	if (jobName === descriptionJobActions.generateImageDescription) {
+		activeDescriptionStartedAt.set(job.id ?? job.name, Date.now());
+		console.log(`describing ${formatJobFilePath(job.data?.filePath)}`);
+	}
+});
+
+worker.on("completed", (job, result) => {
+	const startedAt = activeDescriptionStartedAt.get(job.id ?? job.name);
+	activeDescriptionStartedAt.delete(job.id ?? job.name);
+	const elapsedSuffix = startedAt ? ` (${formatElapsed(Date.now() - startedAt)})` : "";
+	const filePath = formatJobFilePath(result?.filePath ?? job?.data?.filePath);
+	const description = summarizeDescription(result?.description);
+	if (description) {
+		console.log(`described ${filePath}${elapsedSuffix} :: ${description}`);
+	} else {
+		const suffix = result?.reason ? ` (${result.reason})` : "";
+		console.log(`described ${filePath}${elapsedSuffix}${suffix}`);
+	}
 	processedThisRun += 1;
 	void logQueueDepth().catch((error) => {
 		console.error(`queue depth failed ${error.message}`);
@@ -95,6 +143,7 @@ worker.on("completed", () => {
 
 worker.on("failed", (job, error) => {
 	const jobName = job ? resolveDescriptionJobName(job.name, job.data) : "unknown";
+	activeDescriptionStartedAt.delete(job?.id ?? job?.name ?? "unknown");
 	console.error(`failed ${job?.id ?? "unknown"} ${jobName} ${error.message}`);
 	processedThisRun += 1;
 	void logQueueDepth().catch((queueError) => {

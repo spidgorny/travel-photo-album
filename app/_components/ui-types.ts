@@ -94,6 +94,14 @@ export interface QueueInfo {
 	counts: QueueCounts;
 	totalQueued: number;
 	totalProcessed: number;
+	queues?: Array<{
+		label: "media" | "description";
+		configured: boolean;
+		connectionUrl: string | null;
+		name: string;
+		prefix: string;
+		counts: QueueCounts;
+	}>;
 }
 
 export interface ThumbStorageRootInfo {

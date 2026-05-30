@@ -10,14 +10,16 @@ import {
 	closeDescriptionQueue,
 	validateDescriptionQueueConnection,
 } from "../lib/description-queue.ts";
-import { descriptionJobActions } from "../lib/description-jobs.ts";
+import {
+	descriptionJobActions,
+	isDescriptionQueueConfigured,
+} from "../lib/description-jobs.ts";
 import { joinSectionPath } from "../lib/files.ts";
 import {
 hasExifOrientationTransform,
 normalizeStoredDescription,
 readStoredMetaForFile,
 } from "../lib/file-meta.ts";
-import { isAutoDescriptionEnabled } from "../lib/image-description.ts";
 import {
 buildMediaJobId,
 createMediaQueue,
@@ -52,7 +54,7 @@ const queue = createMediaQueue();
 let descriptionQueue = null;
 console.log("Validating BullMQ connection...");
 await validateBullMqConnection(queue, mediaJobNames.warmSectionFile);
-if (isAutoDescriptionEnabled()) {
+if (isDescriptionQueueConfigured()) {
 	descriptionQueue = await validateDescriptionQueueConnection();
 }
 console.log("BullMQ connection OK.");
@@ -200,7 +202,8 @@ hasStoredSectionThumb(sectionId, section, filePath, variant),
 readStoredMetaForFile(section, filePath),
 ]);
 const hasDescription = Boolean(normalizeStoredDescription(storedMeta?.description));
-const needsDescription = !isVideoPath(filePath) && isAutoDescriptionEnabled() && !hasDescription;
+const needsDescription =
+	!isVideoPath(filePath) && isDescriptionQueueConfigured() && !hasDescription;
 
 if (hasThumb && storedMeta && !needsDescription) {
 return { shouldEnqueue: false, reason: "already-indexed", force: false };

@@ -6,8 +6,15 @@ import process from "process";
 import invariant from "tiny-invariant";
 import config from "../lib/config.ts";
 import { closeRedisClient } from "../lib/cache.ts";
-import { closeDescriptionQueue, DescriptionQueue, validateDescriptionQueueConnection } from "../lib/description-queue.ts";
-import { descriptionJobActions } from "../lib/description-jobs.ts";
+import {
+	closeDescriptionQueue,
+	DescriptionQueue,
+	validateDescriptionQueueConnection,
+} from "../lib/description-queue.ts";
+import {
+	descriptionJobActions,
+	isDescriptionQueueConfigured,
+} from "../lib/description-jobs.ts";
 import { joinSectionPath } from "../lib/files.ts";
 import {
 	serializeSectionForWorker,
@@ -23,7 +30,6 @@ import {
 	normalizeStoredDescription,
 	readStoredMetaForFile,
 } from "../lib/file-meta.ts";
-import { isAutoDescriptionEnabled } from "../lib/image-description.ts";
 import {
 	closeThumbKvClient,
 	hasStoredSectionThumb,
@@ -55,7 +61,7 @@ async function main() {
 	}
 	console.log("Validating BullMQ connection...");
 	await validateThumbQueueConnection();
-	if (isAutoDescriptionEnabled()) {
+	if (isDescriptionQueueConfigured()) {
 		await validateDescriptionQueueConnection();
 	}
 	console.log("BullMQ connection OK.");
@@ -200,7 +206,8 @@ async function getIndexState(
 		readStoredMetaForFile(section, filePath),
 	]);
 	const hasDescription = Boolean(normalizeStoredDescription(storedMeta?.description));
-	const needsDescription = !isVideoPath(filePath) && isAutoDescriptionEnabled() && !hasDescription;
+	const needsDescription =
+		!isVideoPath(filePath) && isDescriptionQueueConfigured() && !hasDescription;
 
 	if (hasThumb && storedMeta && !needsDescription) {
 		return { shouldEnqueue: false, reason: "already-indexed", force: false };

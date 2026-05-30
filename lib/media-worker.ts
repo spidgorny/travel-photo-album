@@ -4,7 +4,10 @@ import { Queue } from "bullmq";
 import invariant from "tiny-invariant";
 import config from "./config.ts";
 import { DescriptionQueue } from "./description-queue.ts";
-import { descriptionJobActions } from "./description-jobs.ts";
+import {
+	descriptionJobActions,
+	isDescriptionQueueConfigured,
+} from "./description-jobs.ts";
 import {
 	buildImageMetaData,
 	normalizeStoredDescription,
@@ -111,13 +114,27 @@ return [];
 }
 
 export function resolveSection(sectionId, section) {
+const configSection = Number.isInteger(sectionId)
+? config.sections?.[sectionId] ?? null
+: null;
+if (section?.path) {
+return {
+	...(configSection ?? {}),
+	...section,
+	path: section.path,
+};
+}
+if (configSection) {
+return {
+	...configSection,
+	...(section ?? {}),
+	path: configSection.path,
+};
+}
 if (section) {
 return section;
 }
-if (Number.isInteger(sectionId)) {
-return config.sections?.[sectionId] ?? null;
-}
-return null;
+return configSection;
 }
 
 export function resolveMediaJobName(jobName, payload) {
@@ -195,7 +212,8 @@ if (!(payload?.force ?? false)) {
 		readStoredMetaForFile(section, filePath),
 	]);
 	const hasDescription = Boolean(normalizeStoredDescription(storedMeta?.description));
-	const needsDescription = mediaKind === "image" && isAutoDescriptionEnabled() && !hasDescription;
+	const needsDescription =
+		mediaKind === "image" && isDescriptionQueueConfigured() && !hasDescription;
 	if (hasThumb && storedMeta && needsDescription) {
 		await enqueueImageDescription(sectionId, section, filePath, variant, false);
 		return {
@@ -223,7 +241,7 @@ const thumb = await ensureSectionThumb(
 if (mediaKind === "image" && !isVideoPath(filePath)) {
 	const metaData = await buildImageMetaData(section, filePath);
 	await writeStoredMetaForFile(section, filePath, metaData);
-	if (isAutoDescriptionEnabled()) {
+	if (isDescriptionQueueConfigured()) {
 		await enqueueImageDescription(sectionId, section, filePath, variant, payload?.force ?? false);
 	}
 }
@@ -242,7 +260,7 @@ filePath,
 variant,
 force = false,
 ) {
-if (!isAutoDescriptionEnabled()) {
+if (!isDescriptionQueueConfigured()) {
 	return null;
 }
 const queue = new DescriptionQueue();

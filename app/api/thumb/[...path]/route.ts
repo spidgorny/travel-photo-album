@@ -4,12 +4,14 @@ import { Readable } from "stream";
 import invariant from "tiny-invariant";
 import config from "../../../../lib/config";
 import { DescriptionQueue } from "../../../../lib/description-queue";
-import { descriptionJobActions } from "../../../../lib/description-jobs";
+import {
+	descriptionJobActions,
+	isDescriptionQueueConfigured,
+} from "../../../../lib/description-jobs";
 import {
 	normalizeStoredDescription,
 	readStoredMetaForFile,
 } from "../../../../lib/file-meta";
-import { isAutoDescriptionEnabled } from "../../../../lib/image-description";
 import {
 	serializeSectionForWorker,
 	thumbJobActions,
@@ -58,7 +60,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 		]);
 		const missingDescription =
 			shouldWarmMetadata &&
-			isAutoDescriptionEnabled() &&
+			isDescriptionQueueConfigured() &&
 			!normalizeStoredDescription(storedMeta?.description);
 		if (shouldWarmMetadata && !storedMeta) {
 			const queue = new ThumbQueue();

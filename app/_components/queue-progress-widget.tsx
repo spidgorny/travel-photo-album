@@ -11,8 +11,8 @@ export function QueueProgressWidget() {
 		revalidateOnFocus: false,
 	});
 
-	const baselineProcessedRef = useRef<number | null>(null);
 	const totalObservedRef = useRef(0);
+	const processedObservedRef = useRef(0);
 	const previousQueuedRef = useRef(0);
 
 	if (!data?.queue.configured) {
@@ -25,19 +25,24 @@ export function QueueProgressWidget() {
 	}
 
 	const queuedNow = data.queue.totalQueued;
-	if (baselineProcessedRef.current === null) {
-		baselineProcessedRef.current = data.queue.totalProcessed;
-	}
 	if (previousQueuedRef.current === 0 && queuedNow > 0) {
-		baselineProcessedRef.current = data.queue.totalProcessed;
 		totalObservedRef.current = queuedNow;
+		processedObservedRef.current = 0;
+	} else if (queuedNow > previousQueuedRef.current) {
+		totalObservedRef.current += queuedNow - previousQueuedRef.current;
+	} else if (queuedNow < previousQueuedRef.current) {
+		processedObservedRef.current = Math.min(
+			totalObservedRef.current,
+			processedObservedRef.current + (previousQueuedRef.current - queuedNow),
+		);
 	}
-
-	const processed = Math.max(0, data.queue.totalProcessed - (baselineProcessedRef.current ?? 0));
-	totalObservedRef.current = Math.max(totalObservedRef.current, processed + queuedNow);
+	if (queuedNow === 0 && previousQueuedRef.current > 0) {
+		processedObservedRef.current = totalObservedRef.current;
+	}
 	previousQueuedRef.current = queuedNow;
 
 	const totalObserved = totalObservedRef.current;
+	const processed = processedObservedRef.current;
 	const percentDone = totalObserved > 0 ? Math.min(100, (processed / totalObserved) * 100) : 100;
 
 	return (
