@@ -259,7 +259,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 											Prev
 										</button>
 									) : null}
-									<FullscreenImage photo={currentPhoto} />
+									<FullscreenImage key={currentPhoto.key} photo={currentPhoto} />
 									{currentImage < dimensions.length - 1 ? (
 										<button
 											type="button"

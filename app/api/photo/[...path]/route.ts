@@ -38,13 +38,25 @@ export async function GET(_request: Request, { params }: RouteContext) {
 			throw new Error("MP4 preview");
 		}
 		const mimeType = mime.lookup(fullPath) || "application/octet-stream";
+		const stat = fs.statSync(fullPath);
+		const etag = createStatEtag(stat);
+		if (_request.headers.get("if-none-match") === etag) {
+			return new Response(null, {
+				status: 304,
+				headers: {
+					"Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
+					ETag: etag,
+				},
+			});
+		}
 		const stream = fs.createReadStream(fullPath);
 
 		return new Response(Readable.toWeb(stream) as ReadableStream, {
 			status: 200,
 			headers: {
 				"Content-Type": mimeType,
-				"Cache-Control": "s-maxage=86400, public",
+				"Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
+				ETag: etag,
 			},
 		});
 	} catch (error) {
@@ -57,4 +69,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
 			{ status: 500 },
 		);
 	}
+}
+
+function createStatEtag(stat: fs.Stats) {
+	return `"${stat.size}-${Math.trunc(stat.mtimeMs)}"`;
 }
