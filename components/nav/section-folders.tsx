@@ -4,6 +4,11 @@ import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import type { FilesApiEntry, FilesResponse, UISection } from "../ui-types";
 
+const folderNameCollator = new Intl.Collator(undefined, {
+	numeric: true,
+	sensitivity: "base",
+});
+
 function joinFolderPath(parentPath: string, childPath: string) {
 	return [parentPath, childPath].filter(Boolean).join("/");
 }
@@ -65,7 +70,11 @@ interface SubFoldersProps {
 export function SubFolders({ section, activeFolder, thePath }: SubFoldersProps) {
 	const { data } = useSWR<FilesResponse>(`/api/files/${section.id}/${thePath}`, fetcher);
 	const files = Array.isArray(data?.files) ? data.files : [];
-	const dirs = files.filter((file): file is FilesApiEntry => Boolean(file?.isDir));
+	const dirs = files
+		.filter((file): file is FilesApiEntry => Boolean(file?.isDir))
+		.sort((firstDir, secondDir) =>
+			folderNameCollator.compare(firstDir.path, secondDir.path),
+		);
 
 	if (!data) {
 		return (
