@@ -12,14 +12,23 @@ yarn dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-### Optional Redis folder cache
+### Optional Kvrocks cache and thumbnail store
 
-Folder listings used by `/api/files/...` can be cached in Redis during local development.
+Folder listings used by `/api/files/...` can be cached in Kvrocks during local development, and generated thumbnails for sections without `thumbPath` are persisted there as well.
+Kvrocks speaks the Redis protocol, so the existing folder cache keeps working while thumbnail blobs and dimensions are stored under a separate key prefix.
 Set `REDIS_FOLDER_CACHE_TTL_SECONDS=0` to keep cached entries forever.
 
 ```bash
 cp .env.example .env.local
-docker compose up -d redis
+docker compose up -d kvrocks
+```
+
+Warm a section or folder ahead of browsing:
+
+```bash
+npm run warmup:thumbs -- 5
+npm run warmup:thumbs -- 5 2022/marina-5t/2022-04-more
+npm run warmup:thumbs -- 5 2022/marina-5t/2022-04-more 2022-04-24
 ```
 
 You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.

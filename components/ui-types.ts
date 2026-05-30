@@ -10,6 +10,12 @@ export interface FilesApiEntry {
 	dirPath?: string;
 	fullPath?: string;
 	date?: string | Date;
+	width?: number;
+	height?: number;
+	original?: {
+		width: number;
+		height: number;
+	};
 	title?: string;
 	caption?: string;
 	[key: string]: unknown;

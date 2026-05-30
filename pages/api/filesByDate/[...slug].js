@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import config from "../../../lib/config.js";
 import { isValidDate } from "../../../lib/date.mjs";
 import { getFileDates } from "../../../lib/files.mjs";
+import { getImageDimensions } from "../../../lib/thumb-store.mjs";
 
 export default async function handler(req, res) {
 	try {
@@ -25,6 +26,23 @@ export default async function handler(req, res) {
 		let files = await getFileDates(section, filePathWithDate);
 		files = files.filter((file) => file.date > date && file.date < datePlus1);
 		files = files.filter((file) => !file.isDir);
+		files = await Promise.all(
+			files.map(async (file) => {
+				const filePath = String(file.dirPath ?? file.path)
+					.split("/")
+					.filter(Boolean);
+				const dimensions = await getImageDimensions(sectionId, section, filePath);
+				return {
+					...file,
+					width: dimensions.width,
+					height: dimensions.height,
+					original: {
+						width: dimensions.width,
+						height: dimensions.height,
+					},
+				};
+			}),
+		);
 
 		res.setHeader("Cache-Control", "public, s-maxage=6000");
 		res.setHeader("Expires", DateTime.now().plus({ days: 30 }).toHTTP());

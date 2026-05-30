@@ -8,6 +8,10 @@ import FfmpegCommand from "fluent-ffmpeg";
 import invariant from "tiny-invariant";
 import config from "../../../lib/config.js";
 import {
+	ensureImageThumb,
+	thumbnailTargetWidth,
+} from "../../../lib/thumb-store.mjs";
+import {
 getCatchAllSegments,
 getSectionById,
 jsonError,
@@ -36,7 +40,12 @@ const handler: NextApiHandler<ThumbErrorResponse> = async (req, res) => {
 			}
 			streamInfo = await makeVideoThumb(section.path, section.thumbPath, filePath);
 		} else if (!section.thumbPath) {
-			streamInfo = await makeOnDemandThumb(section.path, filePath);
+			const generatedThumb = await ensureImageThumb(sectionId, section, filePath);
+			streamInfo = {
+				mimeType: generatedThumb.mimeType,
+				stream: Readable.from(generatedThumb.buffer),
+				headers: { "X-Thumb": generatedThumb.source },
+			};
 		} else {
 			try {
 				streamInfo = tryThumbFile(section.thumbPath, filePath);
@@ -99,7 +108,7 @@ filePath: string[],
 const largeFile = joinSectionPath(sectionPath, filePath);
 const thumbFile = joinSectionPath(thumbRoot, filePath);
 fs.mkdirSync(path.dirname(thumbFile), { recursive: true });
-await sharp(largeFile).resize({ width: 256 }).toFile(thumbFile);
+await sharp(largeFile).resize({ width: thumbnailTargetWidth }).toFile(thumbFile);
 const mimeType = mime.lookup(thumbFile) || "application/octet-stream";
 const stream = fs.createReadStream(thumbFile);
 return {
@@ -109,22 +118,8 @@ headers: { "X-Thumb": "resize" },
 };
 }
 
-async function makeOnDemandThumb(
-sectionPath: string,
-filePath: string[],
-): Promise<StreamInfo> {
-const largeFile = joinSectionPath(sectionPath, filePath);
-const buffer = await sharp(largeFile).resize({ width: 256 }).jpeg().toBuffer();
-
-return {
-	mimeType: "image/jpeg",
-	stream: Readable.from(buffer),
-	headers: { "X-Thumb": "resize-memory" },
-};
-}
-
 function isVideo(fullPath: string): boolean {
-	return fullPath.toLowerCase().endsWith("mp4");
+return fullPath.toLowerCase().endsWith("mp4");
 }
 
 async function makeVideoThumb(

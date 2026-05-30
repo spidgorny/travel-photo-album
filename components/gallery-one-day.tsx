@@ -1,11 +1,10 @@
-import axios from "axios";
 import type { CSSProperties, ComponentType, MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import Gallery from "react-photo-gallery";
 import { fetcher } from "../lib/http";
 import { Loading } from "./widget/loading";
-import type { FilesResponse, GalleryPhoto, MetaResponse } from "./ui-types";
+import type { FilesResponse, GalleryPhoto } from "./ui-types";
 
 interface GalleryOneDayProps {
 	sectionId: number;
@@ -75,9 +74,15 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 					regular: src,
 					thumbnail: thumbSrc,
 				},
-				width: 3,
-				height: 2,
+				width:
+					typeof file.width === "number" && file.width > 0 ? file.width : 3,
+				height:
+					typeof file.height === "number" && file.height > 0 ? file.height : 2,
 				caption: fileName,
+				original:
+					typeof file.width === "number" && typeof file.height === "number"
+						? { width: file.width, height: file.height }
+						: undefined,
 			};
 		});
 	}, [data, folder, sectionId]);
@@ -94,51 +99,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 
 	useEffect(() => {
 		setDimensions(photos);
-
-		let cancelled = false;
-
-		async function fetchDimensions() {
-			if (!photos.length) {
-				setDimensions([]);
-				return;
-			}
-
-			for (const [index, img] of photos.entries()) {
-				const metaUrl = `/api/meta/${sectionId}/${img.dirPath ?? img.path}`;
-				const { data: meta } = await axios.get<MetaResponse>(metaUrl);
-
-				if (!meta || cancelled) {
-					if (cancelled) {
-						return;
-					}
-					continue;
-				}
-
-				const width =
-					meta.COMPUTED?.Width ?? meta.COMPUTED?.width ?? meta.dimensions?.width ?? 3;
-				const height =
-					meta.COMPUTED?.Height ?? meta.COMPUTED?.height ?? meta.dimensions?.height ?? 2;
-				const newDim: GalleryPhoto = {
-					...img,
-					...meta,
-					width,
-					height,
-					original: { width, height },
-				};
-
-				setDimensions((old) => {
-					const baseline = old.length ? old : photos;
-					return baseline.map((photo, photoIndex) => (photoIndex === index ? newDim : photo));
-				});
-			}
-		}
-
-		void fetchDimensions();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [date, photos, sectionId]);
+	}, [photos]);
 
 	useEffect(() => {
 		if (!viewerIsOpen) {
