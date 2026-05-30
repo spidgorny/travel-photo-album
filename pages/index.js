@@ -9,7 +9,7 @@ import { useRouter } from "next/router";
 import { SectionsNav } from "../components/nav/sections-nav";
 import { SectionFolders } from "../components/nav/section-folders";
 
-export default function Home({ sections }) {
+export default function Home({ sections = [] }) {
 	const router = useRouter();
 	const sectionId = Number(router.query.section);
 	const section = sections[sectionId];
@@ -28,7 +28,7 @@ export default function Home({ sections }) {
 					<div className="flex-grow-0" style={{ width: "25%" }}>
 						<h4>Travel Photo Album</h4>
 						<SectionsNav sections={sections} sectionId={sectionId} />
-						<SectionFolders section={section} />
+						<SectionFolders section={section} folder={folder} />
 					</div>
 					<div className="flex-grow-1" style={{ width: "75%" }}>
 						{section && (

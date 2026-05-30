@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export function SectionsNav({ sections, sectionId }) {
+export function SectionsNav({ sections = [], sectionId }) {
 	return (
 		<ul>
 			{sections.map((x, index) => (
