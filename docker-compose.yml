@@ -47,6 +47,29 @@ services:
         source: ${MEDIA_ROOT_HOST_PATH:-/Volumes/photo}
         target: ${MEDIA_ROOT_CONTAINER_PATH:-/media/nas/photo}
         read_only: true
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./lib
+          target: /app/lib
+        - action: sync+restart
+          path: ./scripts
+          target: /app/scripts
+        - action: sync+restart
+          path: ./test
+          target: /app/test
+        - action: sync+restart
+          path: ./config.json
+          target: /app/config.json
+        - action: sync+restart
+          path: ./.env
+          target: /app/.env
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./yarn.lock
+        - action: rebuild
+          path: ./docker/worker/Dockerfile
 
 volumes:
   kvrocks_data:

@@ -5,8 +5,6 @@ import type { StoredDirectoryMetaEntry } from "./files-types.ts";
 export const thumbQueueUrl =
 	process.env.THUMB_QUEUE_URL?.trim() ||
 	process.env.BULLMQ_REDIS_URL?.trim() ||
-	process.env.THUMB_KV_URL?.trim() ||
-	process.env.REDIS_URL?.trim() ||
 	"";
 
 export const thumbQueueName = process.env.THUMB_QUEUE_NAME?.trim() || "thumb-jobs";

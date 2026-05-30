@@ -17,14 +17,14 @@ const queue = new Queue(mediaQueueName, {
 connection: getMediaQueueConnection(),
 prefix: mediaQueuePrefix,
 });
+const workerStartedAt = Date.now();
+let processedThisRun = 0;
+let totalObserved = 0;
 
 const worker = new Worker(
 mediaQueueName,
 async (job) => {
-const jobName = resolveMediaJobName(job.name, job.data);
-console.log(`starting ${job.id} ${jobName}`);
 const result = await processMediaJob(job.name, job.data);
-console.log(`completed ${job.id} ${jobName}`);
 return result;
 },
 {
@@ -39,25 +39,52 @@ const counts = await queue.getJobCounts(
 "waiting",
 "active",
 "delayed",
-"failed",
 );
-const pending =
-(counts.waiting ?? 0) +
-(counts.active ?? 0) +
-(counts.delayed ?? 0);
-const jobName = job ? resolveMediaJobName(job.name, job.data) : "unknown";
+const active = counts.active ?? 0;
+const queued = (counts.waiting ?? 0) + (counts.delayed ?? 0);
+const processed = processedThisRun;
+const currentTotal = processed + active + queued;
+totalObserved = Math.max(totalObserved, currentTotal);
+const percentComplete =
+totalObserved > 0 ? `${((processed / totalObserved) * 100).toFixed(1)}%` : "0.0%";
+const remaining = Math.max(totalObserved - processed, 0);
+const elapsedSeconds = Math.max((Date.now() - workerStartedAt) / 1000, 1);
+const throughputPerSecond = processed / elapsedSeconds;
+const eta =
+throughputPerSecond > 0 ? `ETA ${formatEta(remaining / throughputPerSecond)}` : "ETA --";
 console.log(
-`${context} ${job?.id ?? "unknown"} ${jobName} queue pending=${pending} waiting=${counts.waiting ?? 0} active=${counts.active ?? 0} delayed=${counts.delayed ?? 0} failed=${counts.failed ?? 0}`,
+`${context} ${percentComplete} total=${totalObserved} processed/active/queued=${processed}/${active}/${queued} ${eta}`,
 );
+}
+
+function formatEta(totalSeconds) {
+if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
+return "--";
+}
+const rounded = Math.ceil(totalSeconds);
+const hours = Math.floor(rounded / 3600);
+const minutes = Math.floor((rounded % 3600) / 60);
+const seconds = rounded % 60;
+if (hours > 0) {
+return `${hours}h${minutes.toString().padStart(2, "0")}m`;
+}
+if (minutes > 0) {
+return `${minutes}m${seconds.toString().padStart(2, "0")}s`;
+}
+return `${seconds}s`;
 }
 
 worker.on("ready", () => {
 console.log(
 `BullMQ worker ready on queue ${mediaQueuePrefix}:${mediaQueueName} (concurrency ${getWorkerConcurrency()})`,
 );
+void logQueueDepth("queue", null).catch((error) => {
+	console.error(`queue depth failed ${error.message}`);
+});
 });
 
 worker.on("completed", (job) => {
+processedThisRun += 1;
 void logQueueDepth("queue", job).catch((error) => {
 console.error(`queue depth failed ${error.message}`);
 });
@@ -66,6 +93,7 @@ console.error(`queue depth failed ${error.message}`);
 worker.on("failed", (job, error) => {
 const jobName = job ? resolveMediaJobName(job.name, job.data) : "unknown";
 console.error(`failed ${job?.id ?? "unknown"} ${jobName} ${error.message}`);
+processedThisRun += 1;
 void logQueueDepth("queue", job).catch((queueError) => {
 console.error(`queue depth failed ${queueError.message}`);
 });

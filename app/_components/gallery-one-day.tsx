@@ -333,7 +333,10 @@ function SelectedImage({ index, photo, margin, left, top, selected, onClick }: S
 				].join(" ")}
 			/>
 			{!isLoaded ? (
-				<div className="pointer-events-none absolute inset-0 animate-pulse bg-white/10" />
+				<div
+					className="pointer-events-none absolute inset-0 animate-pulse"
+					style={{ backgroundColor: photo.dominantColor ?? "#0f172a", opacity: 0.9 }}
+				/>
 			) : null}
 			<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent px-3 pb-3 pt-10">
 				<div className="truncate text-sm font-medium text-white">{fileName}</div>

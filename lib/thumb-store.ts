@@ -10,7 +10,7 @@ import invariant from "tiny-invariant";
 import { createClient } from "redis";
 import { joinSectionPath } from "./files.ts";
 
-export const thumbKvUrl = process.env.THUMB_KV_URL?.trim() || process.env.REDIS_URL?.trim();
+export const thumbKvUrl = process.env.THUMB_KV_URL?.trim() || "";
 export const thumbKvPrefix =
 	process.env.THUMB_KV_PREFIX?.trim() || "travel-photo-album:thumb:v1";
 const defaultThumbnailWidth = 256;

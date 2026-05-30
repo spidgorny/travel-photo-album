@@ -41,7 +41,7 @@ export function createThumbQueueConnection() {
 
 export async function getThumbQueue() {
 	if (!thumbQueueUrl) {
-		warnThumbQueue("queue disabled; set THUMB_QUEUE_URL, THUMB_KV_URL, or REDIS_URL");
+		warnThumbQueue("queue disabled; set THUMB_QUEUE_URL or BULLMQ_REDIS_URL");
 		return null;
 	}
 	const connection = createThumbQueueConnection();

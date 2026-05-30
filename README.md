@@ -30,7 +30,8 @@ The worker container expects the media root to be mounted at the same Linux path
 
 By default:
 
-- `REDIS_URL` and `THUMB_KV_URL` point at Kvrocks on port `6666`
+- `REDIS_URL` is used for the folder cache and should point at Kvrocks on port `6666`
+- `THUMB_KV_URL` is used for thumbnail/blob metadata storage and should point at Kvrocks on port `6666`
 - `THUMB_QUEUE_URL` and `BULLMQ_REDIS_URL` point at the dedicated Redis container on port `6379`
 - `MEDIA_WORKER_*` overrides are available if the worker container needs different in-network URLs than your local host setup
 
@@ -38,6 +39,12 @@ Restart Kvrocks automatically when its critical config changes:
 
 ```bash
 docker compose watch kvrocks
+```
+
+Sync worker code changes into the container and restart it automatically:
+
+```bash
+docker compose watch media-worker
 ```
 
 Scan an entire collection locally and enqueue thumbnail jobs for all nested folders:
