@@ -19,6 +19,7 @@ interface GalleryOneDayProps {
 	sectionId: number;
 	folder: string;
 	date: string;
+	searchQuery?: string;
 }
 
 const FULLSCREEN_THUMB_VARIANT = "w1600-jpeg";
@@ -48,9 +49,11 @@ type PhotoGalleryComponentProps = {
 
 const PhotoGallery = Gallery as unknown as ComponentType<PhotoGalleryComponentProps>;
 
-export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
-	const apiUrl = `/api/filesByDate/${sectionId}/${folder}/${date}`;
-	const { data } = useSWR<FilesResponse>(apiUrl, fetcher);
+export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: GalleryOneDayProps) {
+	const apiUrl = `/api/filesByDate/${sectionId}/${folder}/${date}${
+		searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ""
+	}`;
+	const { data, mutate } = useSWR<FilesResponse>(apiUrl, fetcher);
 
 	const [currentImage, setCurrentImage] = useState(0);
 	const [viewerIsOpen, setViewerIsOpen] = useState(false);
@@ -90,6 +93,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 				width: typeof file.width === "number" && file.width > 0 ? file.width : 3,
 				height: typeof file.height === "number" && file.height > 0 ? file.height : 2,
 				caption: fileName,
+				description: typeof file.description === "string" ? file.description : undefined,
 				dominantColor:
 					typeof file.dominantColor === "string" && file.dominantColor
 						? file.dominantColor
@@ -271,11 +275,106 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 										</button>
 									) : null}
 								</div>
+								<div className="border-t border-white/10 px-4 py-3 sm:px-5">
+									<DescriptionEditor
+										sectionId={sectionId}
+										folder={folder}
+										photo={currentPhoto}
+										onSaved={(description) => {
+											setDimensions((items) =>
+												items.map((item) =>
+													item.key === currentPhoto.key ? { ...item, description } : item,
+												),
+											);
+											void mutate();
+										}}
+									/>
+								</div>
 							</div>
 						</div>,
 						document.body,
 					)
 				: null}
+		</div>
+	);
+}
+
+interface DescriptionEditorProps {
+	sectionId: number;
+	folder: string;
+	photo: GalleryPhoto;
+	onSaved: (description?: string) => void;
+}
+
+function DescriptionEditor({ sectionId, folder, photo, onSaved }: DescriptionEditorProps) {
+	const [draft, setDraft] = useState(photo.description ?? "");
+	const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+	useEffect(() => {
+		setDraft(photo.description ?? "");
+		setSaveState("idle");
+	}, [photo.key, photo.description]);
+
+	const saveDescription = useCallback(async () => {
+		setSaveState("saving");
+		try {
+			const response = await fetch(`/api/meta/${sectionId}/${folder}/${photo.path}`, {
+				method: "PATCH",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ description: draft }),
+			});
+			if (!response.ok) {
+				throw new Error(`Failed to save description (${response.status})`);
+			}
+			const payload = (await response.json()) as { description?: string | null };
+			const description =
+				typeof payload.description === "string" ? payload.description : undefined;
+			onSaved(description);
+			setDraft(description ?? "");
+			setSaveState("saved");
+		} catch {
+			setSaveState("error");
+		}
+	}, [draft, folder, onSaved, photo.path, sectionId]);
+
+	return (
+		<div className="space-y-2">
+			<div className="flex items-center justify-between gap-3">
+				<div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+					Description
+				</div>
+				<div className="text-xs text-slate-500">
+					{saveState === "saving"
+						? "Saving..."
+						: saveState === "saved"
+							? "Saved"
+							: saveState === "error"
+								? "Save failed"
+								: ""}
+				</div>
+			</div>
+			<textarea
+				value={draft}
+				onChange={(event) => {
+					setDraft(event.target.value);
+					setSaveState("idle");
+				}}
+				placeholder="Add a searchable description for this image"
+				rows={3}
+				className="w-full rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/50"
+			/>
+			<div className="flex justify-end">
+				<button
+					type="button"
+					onClick={() => void saveDescription()}
+					disabled={saveState === "saving"}
+					className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200 transition hover:border-sky-300/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					Save description
+				</button>
+			</div>
 		</div>
 	);
 }
@@ -349,11 +448,15 @@ function SelectedImage({ index, photo, margin, left, top, selected, onClick }: S
 }
 
 function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
+	const [previewLoaded, setPreviewLoaded] = useState(false);
+	const [shouldLoadOriginal, setShouldLoadOriginal] = useState(false);
 	const [originalStatus, setOriginalStatus] = useState<"loading" | "loaded" | "error">(
 		"loading",
 	);
 
 	useEffect(() => {
+		setPreviewLoaded(false);
+		setShouldLoadOriginal(false);
 		setOriginalStatus("loading");
 	}, [photo.key, photo.source.regular]);
 
@@ -379,21 +482,37 @@ function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
 			<img
 				src={fallbackSrc}
 				alt={photo.title ?? photo.caption}
+				onLoad={() => {
+					setPreviewLoaded(true);
+					setShouldLoadOriginal(true);
+				}}
+				onError={() => {
+					setPreviewLoaded(false);
+					setShouldLoadOriginal(true);
+				}}
 				className={[
 					"h-full w-full object-contain transition duration-300",
 					originalStatus === "loaded" ? "opacity-0" : "opacity-100",
 				].join(" ")}
 			/>
-			<img
-				src={photo.source.regular}
-				alt={photo.title ?? photo.caption}
-				onLoad={() => setOriginalStatus("loaded")}
-				onError={() => setOriginalStatus("error")}
-				className={[
-					"absolute inset-0 h-full w-full object-contain transition duration-300",
-					originalStatus === "loaded" ? "opacity-100" : "opacity-0",
-				].join(" ")}
-			/>
+			{shouldLoadOriginal ? (
+				<img
+					src={photo.source.regular}
+					alt={photo.title ?? photo.caption}
+					onLoad={() => setOriginalStatus("loaded")}
+					onError={() => setOriginalStatus("error")}
+					className={[
+						"absolute inset-0 h-full w-full object-contain transition duration-300",
+						originalStatus === "loaded" ? "opacity-100" : "opacity-0",
+					].join(" ")}
+				/>
+			) : null}
+			{!previewLoaded && !shouldLoadOriginal ? (
+				<div
+					className="pointer-events-none absolute inset-0 animate-pulse"
+					style={{ backgroundColor: photo.dominantColor ?? "#020617", opacity: 0.9 }}
+				/>
+			) : null}
 		</div>
 	);
 }

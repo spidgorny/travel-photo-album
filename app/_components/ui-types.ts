@@ -17,6 +17,7 @@ export interface FilesApiEntry {
 	width?: number;
 	height?: number;
 	dominantColor?: string;
+	description?: string;
 	original?: {
 		width: number;
 		height: number;
@@ -30,11 +31,24 @@ export interface DatesResponse {
 	sectionId?: number;
 	dates?: Record<string, number | DaySummary>;
 	locationsByDate?: Record<string, DailyLocationSummary[]>;
+	pagination?: DatesPagination;
 }
 
 export interface DaySummary {
 	count: number;
 	locations?: string[];
+}
+
+export interface DatesPagination {
+	page: number;
+	totalPages: number;
+	totalFiles: number;
+	totalDays: number;
+	pageFiles: number;
+	pageDays: number;
+	perPageFileLimit: number;
+	hasPreviousPage: boolean;
+	hasNextPage: boolean;
 }
 
 export interface FilesResponse {
@@ -59,6 +73,7 @@ export interface MetaResponse {
 		width?: number;
 		height?: number;
 	};
+	description?: string | null;
 	[key: string]: unknown;
 }
 
@@ -115,6 +130,11 @@ export interface ThumbStorageInfo {
 export interface AppInfoResponse {
 	queue: QueueInfo;
 	storage: ThumbStorageInfo;
+	updatedAt: string;
+}
+
+export interface QueueProgressResponse {
+	queue: QueueInfo;
 	updatedAt: string;
 }
 

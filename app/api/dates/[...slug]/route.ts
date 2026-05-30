@@ -9,6 +9,7 @@ import {
 } from "../../../../lib/api-route";
 import {
 	getStoredMetaDirectoryKey,
+	normalizeStoredDescription,
 	readStoredMetaDirectory,
 } from "../../../../lib/file-meta";
 import type {
@@ -16,15 +17,39 @@ import type {
 	DatedFileEntry,
 	StoredDirectoryMetaEntry,
 } from "../../../../lib/files-types";
-import { getFileDates } from "../../../../lib/files";
+import { formatDayKey, getFileDates } from "../../../../lib/files";
 
 interface DatesSuccessResponse {
 	sectionId: number;
 	dates: Record<string, { count: number; locations: string[] }>;
 	locationsByDate: Record<string, DailyLocationSummary[]>;
+	pagination: {
+		page: number;
+		totalPages: number;
+		totalFiles: number;
+		totalDays: number;
+		pageFiles: number;
+		pageDays: number;
+		perPageFileLimit: number;
+		hasPreviousPage: boolean;
+		hasNextPage: boolean;
+	};
 }
 
 const maxLocationsPerDate = 3;
+const galleryPageFileLimit = 1000;
+
+interface DateBucket {
+	dateKey: string;
+	files: DatedFileEntry[];
+	count: number;
+}
+
+interface DatePage {
+	dateKeys: string[];
+	files: DatedFileEntry[];
+	fileCount: number;
+}
 
 interface RouteContext {
 	params: Promise<{
@@ -40,37 +65,55 @@ export async function GET(request: Request, { params }: RouteContext) {
 		const sectionId = getNumericSectionId(sectionInput, url.searchParams.get("section"));
 		const section = getSectionById(config.sections, sectionId);
 		invariant(section, "section");
+		const searchQuery = normalizeSearchQuery(url.searchParams.get("q"));
 		let files = (await getFileDates(section, filePath)) as DatedFileEntry[];
 
 		files = files.filter((file) => !file.isDir);
-		const locationsByDate = await getDateLocationSummaries(section, files);
-		const dates = {} as Record<string, { count: number; locations: string[] }>;
-		for (const file of files) {
-			const dateKey = file.date.toISOString().substring(0, 10);
-			if (!dates[dateKey]) {
-				dates[dateKey] = { count: 0, locations: [] };
-			}
-			dates[dateKey].count += 1;
+		if (searchQuery) {
+			files = await filterFilesByDescriptionQuery(section, files, searchQuery);
 		}
-
-		const sortedDateKeys = Object.keys(dates).sort();
-		const sortedDates = sortedDateKeys
-			.reduce<Record<string, { count: number; locations: string[] }>>((acc, key) => {
-				acc[key] = {
-					...dates[key],
-					locations: (locationsByDate[key] ?? []).map((location) => location.label),
-				};
-				return acc;
-			}, {});
-		const sortedLocationsByDate = sortedDateKeys.reduce<
+		const dateBuckets = groupFilesByDate(files);
+		const dateBucketByKey = new Map(dateBuckets.map((dateBucket) => [dateBucket.dateKey, dateBucket]));
+		const pages = paginateDateBuckets(dateBuckets);
+		const totalPages = Math.max(pages.length, 1);
+		const requestedPage = normalizePageNumber(url.searchParams.get("page"));
+		const page = Math.min(requestedPage, totalPages);
+		const selectedPage = pages[page - 1] ?? { dateKeys: [], files: [], fileCount: 0 };
+		const locationsByDate = await getDateLocationSummaries(section, selectedPage.files);
+		const dates = selectedPage.dateKeys.reduce<
+			Record<string, { count: number; locations: string[] }>
+		>((acc, key) => {
+			const dateBucket = dateBucketByKey.get(key);
+			acc[key] = {
+				count: dateBucket?.count ?? 0,
+				locations: (locationsByDate[key] ?? []).map((location) => location.label),
+			};
+			return acc;
+		}, {});
+		const sortedLocationsByDate = selectedPage.dateKeys.reduce<
 			Record<string, DailyLocationSummary[]>
 		>((acc, key) => {
-				acc[key] = locationsByDate[key] ?? [];
-				return acc;
-			}, {});
+			acc[key] = locationsByDate[key] ?? [];
+			return acc;
+		}, {});
 
 		return NextResponse.json<DatesSuccessResponse>(
-			{ sectionId, dates: sortedDates, locationsByDate: sortedLocationsByDate },
+			{
+				sectionId,
+				dates,
+				locationsByDate: sortedLocationsByDate,
+				pagination: {
+					page,
+					totalPages,
+					totalFiles: files.length,
+					totalDays: dateBuckets.length,
+					pageFiles: selectedPage.fileCount,
+					pageDays: selectedPage.dateKeys.length,
+					perPageFileLimit: galleryPageFileLimit,
+					hasPreviousPage: page > 1,
+					hasNextPage: page < totalPages,
+				},
+			},
 			{
 				headers: {
 					"Cache-Control": "public, s-maxage=6000",
@@ -81,6 +124,55 @@ export async function GET(request: Request, { params }: RouteContext) {
 	} catch (error) {
 		return NextResponse.json(jsonError(error), { status: 500 });
 	}
+}
+
+function groupFilesByDate(files: DatedFileEntry[]): DateBucket[] {
+	const filesByDate = new Map<string, DatedFileEntry[]>();
+
+	for (const file of files) {
+		const dateKey = formatDayKey(file.date);
+		const existingFiles = filesByDate.get(dateKey) ?? [];
+		existingFiles.push(file);
+		filesByDate.set(dateKey, existingFiles);
+	}
+
+	return Array.from(filesByDate.entries())
+		.sort(([firstDate], [secondDate]) => secondDate.localeCompare(firstDate))
+		.map(([dateKey, datedFiles]) => ({
+			dateKey,
+			files: datedFiles,
+			count: datedFiles.length,
+		}));
+}
+
+function paginateDateBuckets(dateBuckets: DateBucket[]) {
+	const pages: DatePage[] = [];
+	let currentPage: DatePage = { dateKeys: [], files: [], fileCount: 0 };
+
+	for (const dateBucket of dateBuckets) {
+		if (
+			currentPage.dateKeys.length > 0 &&
+			currentPage.fileCount + dateBucket.count > galleryPageFileLimit
+		) {
+			pages.push(currentPage);
+			currentPage = { dateKeys: [], files: [], fileCount: 0 };
+		}
+
+		currentPage.dateKeys.push(dateBucket.dateKey);
+		currentPage.files.push(...dateBucket.files);
+		currentPage.fileCount += dateBucket.count;
+	}
+
+	if (currentPage.dateKeys.length > 0) {
+		pages.push(currentPage);
+	}
+
+	return pages;
+}
+
+function normalizePageNumber(pageInput: string | null) {
+	const page = Number.parseInt(pageInput ?? "", 10);
+	return Number.isInteger(page) && page > 0 ? page : 1;
 }
 
 async function getDateLocationSummaries(
@@ -108,7 +200,7 @@ async function getDateLocationSummaries(
 			continue;
 		}
 
-		const dateKey = file.date.toISOString().substring(0, 10);
+		const dateKey = formatDayKey(file.date);
 		const dailyCounts = locationCountsByDate.get(dateKey) ?? new Map();
 		const existing = dailyCounts.get(location.label);
 		dailyCounts.set(location.label, {
@@ -133,4 +225,39 @@ async function getDateLocationSummaries(
 
 function pathBaseName(filePath: string[]) {
 	return filePath[filePath.length - 1] ?? "";
+}
+
+function normalizeSearchQuery(value: string | null) {
+	if (typeof value !== "string") {
+		return null;
+	}
+	const normalized = value.trim().toLocaleLowerCase();
+	return normalized.length ? normalized : null;
+}
+
+async function filterFilesByDescriptionQuery(
+	section: (typeof config.sections)[number],
+	files: DatedFileEntry[],
+	searchQuery: string,
+) {
+	const metaCache = new Map<string, Record<string, StoredDirectoryMetaEntry>>();
+	const matchingFiles: DatedFileEntry[] = [];
+
+	for (const file of files) {
+		const filePath = String(file.dirPath ?? file.path)
+			.split("/")
+			.filter(Boolean);
+		const metaFile = getStoredMetaDirectoryKey(section, filePath);
+		const metaData =
+			metaCache.get(metaFile) ?? (await readStoredMetaDirectory(section, filePath));
+		metaCache.set(metaFile, metaData);
+
+		const fileMeta = metaData[pathBaseName(filePath)];
+		const description = normalizeStoredDescription(fileMeta?.description)?.toLocaleLowerCase();
+		if (description?.includes(searchQuery)) {
+			matchingFiles.push(file);
+		}
+	}
+
+	return matchingFiles;
 }

@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "warmup:thumbs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/warmup-thumbnails.ts",
     "worker:media": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/media-worker.ts",
+    "worker:description": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/description-worker.ts",
     "queue:scan": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/enqueue-collection-scan.ts"
   },
   "dependencies": {

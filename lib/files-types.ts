@@ -31,6 +31,7 @@ export interface StoredDirectoryMetaEntry extends Record<string, unknown> {
 	};
 	GPS?: FileGpsCoordinates;
 	location?: FileLocationLabel;
+	description?: string;
 }
 
 export interface DailyLocationSummary extends FileLocationLabel {

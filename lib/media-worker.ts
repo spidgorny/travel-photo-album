@@ -3,11 +3,15 @@ import crypto from "crypto";
 import { Queue } from "bullmq";
 import invariant from "tiny-invariant";
 import config from "./config.ts";
+import { DescriptionQueue } from "./description-queue.ts";
+import { descriptionJobActions } from "./description-jobs.ts";
 import {
 	buildImageMetaData,
+	normalizeStoredDescription,
 	readStoredMetaForFile,
 	writeStoredMetaForFile,
 } from "./file-meta.ts";
+import { isAutoDescriptionEnabled } from "./image-description.ts";
 import {
 thumbJobActions,
 thumbQueueName,
@@ -96,7 +100,7 @@ export function getEnsureSectionThumbVariant(payload) {
 return payload?.variant || `w${thumbnailTargetWidth}-jpeg`;
 }
 
-function normalizeFilePath(filePath) {
+export function normalizeFilePath(filePath) {
 if (Array.isArray(filePath)) {
 return filePath.filter(Boolean);
 }
@@ -106,7 +110,7 @@ return filePath.split("/").filter(Boolean);
 return [];
 }
 
-function resolveSection(sectionId, section) {
+export function resolveSection(sectionId, section) {
 if (section) {
 return section;
 }
@@ -190,7 +194,18 @@ if (!(payload?.force ?? false)) {
 		hasStoredSectionThumb(sectionId, section, filePath, variant),
 		readStoredMetaForFile(section, filePath),
 	]);
-	if (hasThumb && storedMeta) {
+	const hasDescription = Boolean(normalizeStoredDescription(storedMeta?.description));
+	const needsDescription = mediaKind === "image" && isAutoDescriptionEnabled() && !hasDescription;
+	if (hasThumb && storedMeta && needsDescription) {
+		await enqueueImageDescription(sectionId, section, filePath, variant, false);
+		return {
+			action: mediaJobNames.warmSectionFile,
+			filePath: filePath.join("/"),
+			queuedDescription: true,
+			reason: "missing-description",
+		};
+	}
+	if (hasThumb && storedMeta && !needsDescription) {
 		return {
 			action: mediaJobNames.warmSectionFile,
 			filePath: filePath.join("/"),
@@ -200,19 +215,43 @@ if (!(payload?.force ?? false)) {
 	}
 }
 const thumb = await ensureSectionThumb(
+	sectionId,
+	section,
+	filePath,
+	variant,
+);
+if (mediaKind === "image" && !isVideoPath(filePath)) {
+	const metaData = await buildImageMetaData(section, filePath);
+	await writeStoredMetaForFile(section, filePath, metaData);
+	if (isAutoDescriptionEnabled()) {
+		await enqueueImageDescription(sectionId, section, filePath, variant, payload?.force ?? false);
+	}
+}
+return {
+	action: mediaJobNames.warmSectionFile,
+	filePath: filePath.join("/"),
+	kind: thumb.kind,
+	source: thumb.source,
+};
+}
+
+async function enqueueImageDescription(
 sectionId,
 section,
 filePath,
 variant,
-);
-if (mediaKind === "image" && !isVideoPath(filePath)) {
-const metaData = await buildImageMetaData(section, filePath);
-await writeStoredMetaForFile(section, filePath, metaData);
+force = false,
+) {
+if (!isAutoDescriptionEnabled()) {
+	return null;
 }
-return {
-action: mediaJobNames.warmSectionFile,
-filePath: filePath.join("/"),
-kind: thumb.kind,
-source: thumb.source,
-};
+const queue = new DescriptionQueue();
+return queue.enqueue({
+	action: descriptionJobActions.generateImageDescription,
+	sectionId,
+	section,
+	filePath,
+	variant,
+	force,
+});
 }

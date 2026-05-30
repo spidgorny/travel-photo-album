@@ -110,6 +110,33 @@ export async function writeStoredMetaForFile(
 	return { metaFile: metaKey, baseName };
 }
 
+export function normalizeStoredDescription(value: unknown): string | undefined {
+	if (typeof value !== "string") {
+		return undefined;
+	}
+	const normalized = value.trim();
+	return normalized.length ? normalized : undefined;
+}
+
+export async function updateStoredDescriptionForFile(
+	section: ConfigSection,
+	filePath: string[],
+	description: string | null | undefined,
+) {
+	const existingMeta = (await readStoredMetaForFile(section, filePath)) ?? { COMPUTED: {} };
+	const normalizedDescription = normalizeStoredDescription(description);
+	const nextMeta: StoredDirectoryMetaEntry = {
+		...existingMeta,
+		COMPUTED: existingMeta.COMPUTED ?? {},
+	};
+	if (normalizedDescription) {
+		nextMeta.description = normalizedDescription;
+	} else {
+		delete nextMeta.description;
+	}
+	return writeStoredMetaForFile(section, filePath, nextMeta);
+}
+
 export async function buildImageMetaData(
 	section: ConfigSection,
 	filePath: string[],
@@ -119,6 +146,8 @@ export async function buildImageMetaData(
 	const dimensions = await getImageDimensions(fullPath);
 	const gps = await extractGpsCoordinates(fullPath);
 	const location = gps ? reverseGeocodeLocation(gps) : null;
+	const existingMeta = await readStoredMetaForFile(section, filePath);
+	const description = normalizeStoredDescription(existingMeta?.description);
 
 	return {
 		FileName: path.basename(fullPath),
@@ -129,6 +158,7 @@ export async function buildImageMetaData(
 			Height: dimensions.height,
 		},
 		dimensions,
+		...(description ? { description } : {}),
 		...(gps ? { GPS: gps } : {}),
 		...(location ? { location } : {}),
 	};

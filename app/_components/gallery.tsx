@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import { FolderInfoSidebar } from "./folder-info-sidebar";
@@ -14,9 +15,22 @@ interface GalleryForProps {
 }
 
 export function GalleryFor({ section, folder = "" }: GalleryForProps) {
-	const apiUrl = `/api/dates/${section.id}/${folder}`;
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
+	const requestedPage = normalizePageNumber(searchParams.get("page"));
+	const searchQuery = normalizeSearchQuery(searchParams.get("q"));
+	const [searchInput, setSearchInput] = useState(searchQuery);
+	const apiUrl =
+		requestedPage > 1
+			? `/api/dates/${section.id}/${folder}?page=${requestedPage}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`
+			: `/api/dates/${section.id}/${folder}${searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ""}`;
 	const { data } = useSWR<DatesResponse>(apiUrl, fetcher);
 	const [isFolderInfoOpen, setIsFolderInfoOpen] = useState(false);
+
+	useEffect(() => {
+		setSearchInput(searchQuery);
+	}, [searchQuery]);
 
 	if (!data) {
 		return (
@@ -32,12 +46,25 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 			...normalizeDaySummary(summary),
 		}))
 		.sort(({ date: firstDate }, { date: secondDate }) => secondDate.localeCompare(firstDate));
+	const pagination = data.pagination ?? {
+		page: 1,
+		totalPages: 1,
+		totalFiles: dates.reduce((total, day) => total + day.count, 0),
+		totalDays: dates.length,
+		pageFiles: dates.reduce((total, day) => total + day.count, 0),
+		pageDays: dates.length,
+		perPageFileLimit: 1000,
+		hasPreviousPage: false,
+		hasNextPage: false,
+	};
 	const isSSR = typeof window === "undefined";
 
 	if (!dates.length) {
 		return (
 			<div className="flex min-h-[16rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-900/40 px-6 text-center text-sm text-slate-400">
-				No dated photos were found in this folder yet.
+				{searchQuery
+					? "No photos matched this description search in the current folder."
+					: "No dated photos were found in this folder yet."}
 			</div>
 		);
 	}
@@ -70,11 +97,81 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 						<p className="text-sm text-slate-400">
 							Photos are grouped by capture day for quick scanning.
 						</p>
+						<div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+							<input
+								type="search"
+								value={searchInput}
+								onChange={(event) => setSearchInput(event.target.value)}
+								onKeyDown={(event) => {
+									if (event.key === "Enter") {
+										router.push(
+											createGalleryPageHref({
+												pathname,
+												searchParams,
+												page: 1,
+												searchQuery: searchInput,
+											}),
+										);
+									}
+								}}
+								placeholder="Search image descriptions"
+								className="w-full rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/50 sm:max-w-sm"
+							/>
+							<div className="flex items-center gap-2">
+								<button
+									type="button"
+									onClick={() =>
+										router.push(
+											createGalleryPageHref({
+												pathname,
+												searchParams,
+												page: 1,
+												searchQuery: searchInput,
+											}),
+										)
+									}
+									className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-200 transition hover:border-sky-300/30 hover:text-white"
+								>
+									Search
+								</button>
+								{searchQuery ? (
+									<button
+										type="button"
+										onClick={() =>
+											router.push(
+												createGalleryPageHref({
+													pathname,
+													searchParams,
+													page: 1,
+													searchQuery: "",
+												}),
+											)
+										}
+										className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+									>
+										Clear
+									</button>
+								) : null}
+							</div>
+						</div>
 					</div>
 					<div className="text-sm text-slate-400">
-						{dates.length} day{dates.length === 1 ? "" : "s"}
+						{pagination.totalPages > 1
+							? `${pagination.pageDays} day${pagination.pageDays === 1 ? "" : "s"} on this page`
+							: `${dates.length} day${dates.length === 1 ? "" : "s"}`}
 					</div>
 				</div>
+				{pagination.totalPages > 1 ? (
+					<GalleryPagination
+						currentPage={pagination.page}
+						totalPages={pagination.totalPages}
+						pageFiles={pagination.pageFiles}
+						totalFiles={pagination.totalFiles}
+						onPageChange={(page) =>
+							router.push(createGalleryPageHref({ pathname, searchParams, page }))
+						}
+					/>
+				) : null}
 				{dates.map(({ date, count, locations }) => {
 					const anchorId = getDayAnchorId(date);
 					return (
@@ -108,10 +205,28 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 									) : null}
 								</div>
 							</div>
-							{!isSSR && <GalleryOneDay sectionId={section.id} folder={folder} date={date} />}
+							{!isSSR && (
+								<GalleryOneDay
+									sectionId={section.id}
+									folder={folder}
+									date={date}
+									searchQuery={searchQuery}
+								/>
+							)}
 						</section>
 					);
 				})}
+				{pagination.totalPages > 1 ? (
+					<GalleryPagination
+						currentPage={pagination.page}
+						totalPages={pagination.totalPages}
+						pageFiles={pagination.pageFiles}
+						totalFiles={pagination.totalFiles}
+						onPageChange={(page) =>
+							router.push(createGalleryPageHref({ pathname, searchParams, page }))
+						}
+					/>
+				) : null}
 			</div>
 
 			<aside className="hidden xl:block">
@@ -141,6 +256,80 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 }
 
 const MAX_LOCATION_LABELS = 3;
+const VISIBLE_PAGINATION_RADIUS = 1;
+
+interface GalleryPaginationProps {
+	currentPage: number;
+	totalPages: number;
+	pageFiles: number;
+	totalFiles: number;
+	onPageChange: (page: number) => void;
+}
+
+function GalleryPagination({
+	currentPage,
+	totalPages,
+	pageFiles,
+	totalFiles,
+	onPageChange,
+}: GalleryPaginationProps) {
+	const pageItems = getVisiblePageItems(currentPage, totalPages);
+
+	return (
+		<nav
+			aria-label="Gallery pages"
+			className="flex flex-col gap-3 rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 sm:flex-row sm:items-center sm:justify-between"
+		>
+			<div className="text-sm text-slate-400">
+				Page {currentPage} of {totalPages} · {pageFiles.toLocaleString()} photo
+				{pageFiles === 1 ? "" : "s"} on this page · {totalFiles.toLocaleString()} total
+			</div>
+			<div className="flex flex-wrap items-center gap-2">
+				<button
+					type="button"
+					onClick={() => onPageChange(currentPage - 1)}
+					disabled={currentPage <= 1}
+					className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-200 transition hover:border-sky-300/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+				>
+					Newer
+				</button>
+				{pageItems.map((item, index) =>
+					item === "gap" ? (
+						<span
+							key={`gap:${currentPage}:${index}`}
+							className="px-1 text-sm text-slate-500"
+						>
+							...
+						</span>
+					) : (
+						<button
+							key={item}
+							type="button"
+							onClick={() => onPageChange(item)}
+							aria-current={item === currentPage ? "page" : undefined}
+							className={[
+								"rounded-full border px-3 py-1.5 text-sm transition",
+								item === currentPage
+									? "border-sky-300/40 bg-sky-300/10 text-white"
+									: "border-white/10 bg-white/[0.04] text-slate-200 hover:border-sky-300/30 hover:text-white",
+							].join(" ")}
+						>
+							{item}
+						</button>
+					),
+				)}
+				<button
+					type="button"
+					onClick={() => onPageChange(currentPage + 1)}
+					disabled={currentPage >= totalPages}
+					className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-200 transition hover:border-sky-300/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+				>
+					Older
+				</button>
+			</div>
+		</nav>
+	);
+}
 
 function normalizeDaySummary(summary: number | DaySummary | undefined) {
 	if (typeof summary === "number") {
@@ -164,9 +353,76 @@ function getDayAnchorId(date: string) {
 }
 
 function formatDateJumpLabel(date: string) {
-	if (!/^\d{8}$/.test(date)) {
-		return date;
+	const compactMatch = date.match(/^\d{4}\d{2}(\d{2})$/);
+	if (compactMatch) {
+		return String(Number(compactMatch[1]));
 	}
 
-	return `${date.slice(4, 6)}-${date.slice(6, 8)}`;
+	const isoMatch = date.match(/^\d{4}-\d{2}-(\d{2})$/);
+	if (isoMatch) {
+		return String(Number(isoMatch[1]));
+	}
+
+	return date;
+}
+
+function normalizePageNumber(pageInput: string | null) {
+	const page = Number.parseInt(pageInput ?? "", 10);
+	return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
+function createGalleryPageHref({
+	pathname,
+	searchParams,
+	page,
+	searchQuery,
+}: {
+	pathname: string;
+	searchParams: ReturnType<typeof useSearchParams>;
+	page: number;
+	searchQuery?: string;
+}) {
+	const nextSearchParams = new URLSearchParams(searchParams.toString());
+	if (page <= 1) {
+		nextSearchParams.delete("page");
+	} else {
+		nextSearchParams.set("page", String(page));
+	}
+	const normalizedSearchQuery = normalizeSearchQuery(searchQuery ?? nextSearchParams.get("q"));
+	if (normalizedSearchQuery) {
+		nextSearchParams.set("q", normalizedSearchQuery);
+	} else {
+		nextSearchParams.delete("q");
+	}
+	const queryString = nextSearchParams.toString();
+	return queryString ? `${pathname}?${queryString}` : pathname;
+}
+
+function normalizeSearchQuery(value: string | null | undefined) {
+	return value?.trim() ?? "";
+}
+
+function getVisiblePageItems(currentPage: number, totalPages: number) {
+	const pages = new Set<number>([1, totalPages]);
+
+	for (
+		let page = Math.max(1, currentPage - VISIBLE_PAGINATION_RADIUS);
+		page <= Math.min(totalPages, currentPage + VISIBLE_PAGINATION_RADIUS);
+		page += 1
+	) {
+		pages.add(page);
+	}
+
+	const sortedPages = Array.from(pages).sort((firstPage, secondPage) => firstPage - secondPage);
+	const items: Array<number | "gap"> = [];
+
+	for (const page of sortedPages) {
+		const previousPage = items.at(-1);
+		if (typeof previousPage === "number" && page - previousPage > 1) {
+			items.push("gap");
+		}
+		items.push(page);
+	}
+
+	return items;
 }

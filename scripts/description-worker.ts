@@ -4,32 +4,43 @@ import process from "process";
 import { Queue, Worker } from "bullmq";
 import { closeRedisClient } from "../lib/cache.ts";
 import {
-	getMediaQueueConnection,
-	getWorkerConcurrency,
-	mediaQueueName,
-	mediaQueuePrefix,
-	processMediaJob,
-	resolveMediaJobName,
-} from "../lib/media-worker.ts";
+	createDescriptionQueueConnection,
+} from "../lib/description-queue.ts";
+import {
+	descriptionQueueName,
+	descriptionQueuePrefix,
+} from "../lib/description-jobs.ts";
+import { processDescriptionJob, resolveDescriptionJobName } from "../lib/description-worker.ts";
 import { closeThumbKvClient } from "../lib/thumb-store.ts";
 
-const queue = new Queue(mediaQueueName, {
-	connection: getMediaQueueConnection(),
-	prefix: mediaQueuePrefix,
+const connection = createDescriptionQueueConnection();
+if (!connection) {
+	throw new Error("Description queue is not configured");
+}
+
+const queue = new Queue(descriptionQueueName, {
+	connection,
+	prefix: descriptionQueuePrefix,
 });
 const workerStartedAt = Date.now();
 let processedThisRun = 0;
 let totalObserved = 0;
+const concurrency = getDescriptionWorkerConcurrency();
 
 const worker = new Worker(
-	mediaQueueName,
-	async (job) => processMediaJob(job.name, job.data),
+	descriptionQueueName,
+	async (job) => processDescriptionJob(job.name, job.data),
 	{
-		connection: getMediaQueueConnection(),
-		concurrency: getWorkerConcurrency(),
-		prefix: mediaQueuePrefix,
+		connection,
+		concurrency,
+		prefix: descriptionQueuePrefix,
 	},
 );
+
+function getDescriptionWorkerConcurrency() {
+	const parsedConcurrency = Number(process.env.DESCRIPTION_WORKER_CONCURRENCY ?? 1);
+	return Number.isInteger(parsedConcurrency) && parsedConcurrency > 0 ? parsedConcurrency : 1;
+}
 
 async function logQueueDepth() {
 	const counts = await queue.getJobCounts("waiting", "active", "delayed");
@@ -68,7 +79,7 @@ function formatEta(totalSeconds) {
 
 worker.on("ready", () => {
 	console.log(
-		`BullMQ worker ready on queue ${mediaQueuePrefix}:${mediaQueueName} (concurrency ${getWorkerConcurrency()})`,
+		`Description worker ready on queue ${descriptionQueuePrefix}:${descriptionQueueName} (concurrency ${concurrency})`,
 	);
 	void logQueueDepth().catch((error) => {
 		console.error(`queue depth failed ${error.message}`);
@@ -83,7 +94,7 @@ worker.on("completed", () => {
 });
 
 worker.on("failed", (job, error) => {
-	const jobName = job ? resolveMediaJobName(job.name, job.data) : "unknown";
+	const jobName = job ? resolveDescriptionJobName(job.name, job.data) : "unknown";
 	console.error(`failed ${job?.id ?? "unknown"} ${jobName} ${error.message}`);
 	processedThisRun += 1;
 	void logQueueDepth().catch((queueError) => {
@@ -102,7 +113,7 @@ async function shutdown(signal, exitCode = 0) {
 		return;
 	}
 	shuttingDown = true;
-	console.log(`shutting down worker after ${signal}`);
+	console.log(`shutting down description worker after ${signal}`);
 	await worker.close().catch((error) => {
 		console.error(`worker close failed ${error.message}`);
 		exitCode = 1;

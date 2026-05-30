@@ -3,10 +3,10 @@
 import { useRef } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
-import type { AppInfoResponse } from "./ui-types";
+import type { QueueProgressResponse } from "./ui-types";
 
 export function QueueProgressWidget() {
-	const { data } = useSWR<AppInfoResponse>("/api/info", fetcher, {
+	const { data } = useSWR<QueueProgressResponse>("/api/queue-info", fetcher, {
 		refreshInterval: 10_000,
 		revalidateOnFocus: false,
 	});

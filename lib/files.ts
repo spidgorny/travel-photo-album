@@ -75,20 +75,31 @@ export async function getFileDates(
 	section: ConfigSection,
 	imagePath: string[] = [],
 ): Promise<DatedFileEntry[]> {
-	let files = await getFilteredFiles(section, imagePath);
-	// console.log(files);
+	return magicCache(
+		"getFileDates",
+		async () => {
+			let files = await getFilteredFiles(section, imagePath);
+			// console.log(files);
 
-	files = files.map((x) => ({
-		...x,
-		dirPath: path.join(...imagePath, x.path),
-		fullPath: path.join(section.path, x.path),
-		date: getFileDate(path.join(section.path, x.path), x.ctime),
-	}));
+			files = files.map((x) => ({
+				...x,
+				dirPath: path.join(...imagePath, x.path),
+				fullPath: path.join(section.path, x.path),
+				date: getFileDate(path.join(section.path, x.path), x.ctime),
+			}));
 
-	files = files.filter((x) => x.date);
-	// console.log(files);
+			files = files.filter((x) => x.date);
+			// console.log(files);
 
-	return files;
+			return files;
+		},
+		{
+			sectionPath: section.path,
+			sectionFrom: section.from ?? null,
+			sectionTill: section.till ?? null,
+			imagePath,
+		},
+	);
 }
 
 export function getFileDate(
@@ -113,4 +124,24 @@ export function getFileDate(
 		console.error('ERROR', e.message);
 		return null;
 	}
+}
+
+export function formatDayKey(date: Date): string {
+	return [
+		date.getFullYear(),
+		String(date.getMonth() + 1).padStart(2, "0"),
+		String(date.getDate()).padStart(2, "0"),
+	].join("-");
+}
+
+export function parseDayKey(value: string): string | null {
+	const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+	if (match) {
+		return `${match[1]}-${match[2]}-${match[3]}`;
+	}
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) {
+		return null;
+	}
+	return formatDayKey(date);
 }

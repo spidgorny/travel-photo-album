@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import invariant from "tiny-invariant";
 import config from "../../../../lib/config";
 import { isValidDate } from "../../../../lib/date";
-import { getFileDates } from "../../../../lib/files";
+import { readStoredMetaForFile } from "../../../../lib/file-meta";
+import { formatDayKey, getFileDates, parseDayKey } from "../../../../lib/files";
 import { getImageDimensions } from "../../../../lib/thumb-store";
 
 interface RouteContext {
@@ -12,10 +13,11 @@ interface RouteContext {
 	}>;
 }
 
-export async function GET(_request: Request, { params }: RouteContext) {
+export async function GET(request: Request, { params }: RouteContext) {
 	try {
 		const { slug = [] } = await params;
 		const [sectionInput, ...filePathWithDate] = slug;
+		const url = new URL(request.url);
 		const dateInput = filePathWithDate.pop();
 		const sectionId = Number(sectionInput);
 		const section = config.sections?.[sectionId];
@@ -24,22 +26,28 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 		const date = new Date(dateInput);
 		invariant(isValidDate(date), "date missing");
-		const datePlus1 = new Date(date.getTime() + 1000 * 60 * 60 * 24);
+		const dayKey = parseDayKey(dateInput);
+		invariant(dayKey, "date missing");
+		const searchQuery = normalizeSearchQuery(url.searchParams.get("q"));
 
 		let files = await getFileDates(section, filePathWithDate);
-		files = files.filter((file) => file.date > date && file.date < datePlus1);
+		files = files.filter((file) => file.date && formatDayKey(file.date) === dayKey);
 		files = files.filter((file) => !file.isDir);
-		files = await Promise.all(
+		let responseFiles = await Promise.all(
 			files.map(async (file) => {
 				const filePath = String(file.dirPath ?? file.path)
 					.split("/")
 					.filter(Boolean);
-				const dimensions = await getImageDimensions(sectionId, section, filePath);
+				const [dimensions, storedMeta] = await Promise.all([
+					getImageDimensions(sectionId, section, filePath),
+					readStoredMetaForFile(section, filePath),
+				]);
 				return {
 					...file,
 					width: dimensions.width,
 					height: dimensions.height,
 					dominantColor: dimensions.dominantColor,
+					description: normalizeDescription(storedMeta?.description),
 					original: {
 						width: dimensions.width,
 						height: dimensions.height,
@@ -47,9 +55,14 @@ export async function GET(_request: Request, { params }: RouteContext) {
 				};
 			}),
 		);
+		if (searchQuery) {
+			responseFiles = responseFiles.filter((file) =>
+				normalizeDescription(file.description)?.toLocaleLowerCase().includes(searchQuery),
+			);
+		}
 
 		return NextResponse.json(
-			{ sectionId, section, files },
+			{ sectionId, section, files: responseFiles },
 			{
 				headers: {
 					"Cache-Control": "public, s-maxage=6000",
@@ -68,4 +81,20 @@ export async function GET(_request: Request, { params }: RouteContext) {
 			{ status: 500 },
 		);
 	}
+}
+
+function normalizeSearchQuery(value: string | null) {
+	if (typeof value !== "string") {
+		return null;
+	}
+	const normalized = value.trim().toLocaleLowerCase();
+	return normalized.length ? normalized : null;
+}
+
+function normalizeDescription(value: unknown) {
+	if (typeof value !== "string") {
+		return undefined;
+	}
+	const normalized = value.trim();
+	return normalized.length ? normalized : undefined;
 }

@@ -6,11 +6,18 @@ import process from "process";
 import invariant from "tiny-invariant";
 import { closeRedisClient } from "../lib/cache.ts";
 import config from "../lib/config.ts";
+import {
+	closeDescriptionQueue,
+	validateDescriptionQueueConnection,
+} from "../lib/description-queue.ts";
+import { descriptionJobActions } from "../lib/description-jobs.ts";
 import { joinSectionPath } from "../lib/files.ts";
 import {
 hasExifOrientationTransform,
+normalizeStoredDescription,
 readStoredMetaForFile,
 } from "../lib/file-meta.ts";
+import { isAutoDescriptionEnabled } from "../lib/image-description.ts";
 import {
 buildMediaJobId,
 createMediaQueue,
@@ -42,8 +49,12 @@ invariant(section.path, "section.path");
 console.log(`Resolved collection ${sectionId}: ${section.name}`);
 console.log(`Root path: ${section.path}`);
 const queue = createMediaQueue();
+let descriptionQueue = null;
 console.log("Validating BullMQ connection...");
 await validateBullMqConnection(queue, mediaJobNames.warmSectionFile);
+if (isAutoDescriptionEnabled()) {
+	descriptionQueue = await validateDescriptionQueueConnection();
+}
 console.log("BullMQ connection OK.");
 console.log("Scanning folders recursively...");
 
@@ -51,6 +62,7 @@ const scanStats = { directories: 0, files: 0 };
 let enqueued = 0;
 let skipped = 0;
 const batchEntries = [];
+const descriptionBatchEntries = [];
 const variant = getEnsureSectionThumbVariant({});
 
 await scanCollectionFiles(section, [], scanStats, async (filePath) => {
@@ -73,21 +85,44 @@ filePath,
 variant,
 force: indexState.force,
 };
-batchEntries.push({
-name: mediaJobNames.warmSectionFile,
-data: payload,
+const targetBatch =
+indexState.reason === "missing-description" ? descriptionBatchEntries : batchEntries;
+const targetName =
+indexState.reason === "missing-description"
+	? descriptionJobActions.generateImageDescription
+	: mediaJobNames.warmSectionFile;
+const targetPrefix = indexState.reason === "missing-description" ? "description" : "thumb";
+targetBatch.push({
+name: targetName,
+data: {
+	...(indexState.reason === "missing-description"
+		? { action: descriptionJobActions.generateImageDescription }
+		: {}),
+	...payload,
+},
 opts: {
-jobId: `thumb:${mediaJobNames.warmSectionFile}:${buildMediaJobId(mediaJobNames.warmSectionFile, payload)}`,
+	jobId: `${targetPrefix}:${targetName}:${buildMediaJobId(targetName, payload)}`,
 },
 });
 if (batchEntries.length >= batchSize) {
 await flushBatch(queue, batchEntries, {
-enqueued,
-skipped,
-scanned: scanStats.files,
+	enqueued,
+	skipped,
+	scanned: scanStats.files,
+	label: "warmup",
 });
 enqueued += batchEntries.length;
 batchEntries.length = 0;
+}
+if (descriptionQueue && descriptionBatchEntries.length >= batchSize) {
+await flushBatch(descriptionQueue, descriptionBatchEntries, {
+	enqueued,
+	skipped,
+	scanned: scanStats.files,
+	label: "description",
+});
+enqueued += descriptionBatchEntries.length;
+descriptionBatchEntries.length = 0;
 }
 });
 
@@ -95,11 +130,23 @@ await flushBatch(queue, batchEntries, {
 enqueued,
 skipped,
 scanned: scanStats.files,
+label: "warmup",
 });
 enqueued += batchEntries.length;
 batchEntries.length = 0;
+if (descriptionQueue) {
+await flushBatch(descriptionQueue, descriptionBatchEntries, {
+	enqueued,
+	skipped,
+	scanned: scanStats.files,
+	label: "description",
+});
+enqueued += descriptionBatchEntries.length;
+descriptionBatchEntries.length = 0;
+}
 
 await queue.close();
+await closeDescriptionQueue();
 console.log(
 `Scan complete: ${scanStats.directories} director${scanStats.directories === 1 ? "y" : "ies"}, ${scanStats.files} candidate files`,
 );
@@ -152,13 +199,19 @@ const [hasThumb, storedMeta] = await Promise.all([
 hasStoredSectionThumb(sectionId, section, filePath, variant),
 readStoredMetaForFile(section, filePath),
 ]);
+const hasDescription = Boolean(normalizeStoredDescription(storedMeta?.description));
+const needsDescription = !isVideoPath(filePath) && isAutoDescriptionEnabled() && !hasDescription;
 
-if (hasThumb && storedMeta) {
+if (hasThumb && storedMeta && !needsDescription) {
 return { shouldEnqueue: false, reason: "already-indexed", force: false };
 }
 
 if (!hasThumb && !storedMeta) {
 return { shouldEnqueue: true, reason: "missing-thumb-and-metadata", force: false };
+}
+
+if (needsDescription) {
+return { shouldEnqueue: true, reason: "missing-description", force: false };
 }
 
 return {
@@ -192,7 +245,7 @@ return;
 }
 await queue.addBulk(batchEntries);
 console.log(
-`enqueued ${stats.enqueued + batchEntries.length} warmup jobs (${stats.scanned} scanned, ${stats.skipped} skipped)`,
+	`enqueued ${stats.enqueued + batchEntries.length} ${stats.label} jobs (${stats.scanned} scanned, ${stats.skipped} skipped)`,
 );
 }
 

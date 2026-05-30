@@ -5,7 +5,7 @@ services:
       - "6666:6666"
     command: -c /etc/kvrocks/kvrocks.conf
     volumes:
-      - kvrocks_data:/var/lib/kvrocks
+      - ./kvrocks:/var/lib/kvrocks
       - ./docker/kvrocks/kvrocks.conf:/etc/kvrocks/kvrocks.conf:ro
     develop:
       watch:
@@ -71,6 +71,59 @@ services:
         - action: rebuild
           path: ./docker/worker/Dockerfile
 
+  description-worker:
+    build:
+      context: .
+      dockerfile: docker/description-worker/Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      - kvrocks
+      - redis
+    environment:
+      REDIS_URL: ${DESCRIPTION_WORKER_REDIS_URL:-redis://kvrocks:6666}
+      THUMB_KV_URL: ${DESCRIPTION_WORKER_THUMB_KV_URL:-redis://kvrocks:6666}
+      DESCRIPTION_QUEUE_URL: ${DESCRIPTION_WORKER_QUEUE_URL:-redis://redis:6379}
+      DESCRIPTION_QUEUE_NAME: ${DESCRIPTION_QUEUE_NAME:-description-jobs}
+      DESCRIPTION_QUEUE_PREFIX: ${DESCRIPTION_QUEUE_PREFIX:-travel-photo-album}
+      DESCRIPTION_WORKER_CONCURRENCY: ${DESCRIPTION_WORKER_CONCURRENCY:-1}
+      THUMB_KV_PREFIX: ${THUMB_KV_PREFIX:-travel-photo-album:thumb:v1}
+      THUMB_TARGET_WIDTH: ${THUMB_TARGET_WIDTH:-256}
+      REDIS_FOLDER_CACHE_TTL_SECONDS: ${REDIS_FOLDER_CACHE_TTL_SECONDS:-0}
+      OLLAMA_BASE_URL: ${DESCRIPTION_WORKER_OLLAMA_BASE_URL:-http://127.0.0.1:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OLLAMA_CAPTION_PROMPT: ${OLLAMA_CAPTION_PROMPT:-}
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ollama_data:/root/.ollama
+      - type: bind
+        source: ${MEDIA_ROOT_HOST_PATH:-/Volumes/photo}
+        target: ${MEDIA_ROOT_CONTAINER_PATH:-/media/nas/photo}
+        read_only: true
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./lib
+          target: /app/lib
+        - action: sync+restart
+          path: ./scripts
+          target: /app/scripts
+        - action: sync+restart
+          path: ./config.json
+          target: /app/config.json
+        - action: sync+restart
+          path: ./.env
+          target: /app/.env
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./yarn.lock
+        - action: rebuild
+          path: ./docker/description-worker/Dockerfile
+        - action: rebuild
+          path: ./docker/description-worker/entrypoint.sh
+
 volumes:
-  kvrocks_data:
   redis_data:
+  ollama_data:

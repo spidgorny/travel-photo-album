@@ -12,7 +12,9 @@ import { joinSectionPath } from "../../../../lib/files";
 import {
 	buildBasicFileMetaData,
 	buildImageMetaData,
+	normalizeStoredDescription,
 	readStoredMetaForFile,
+	updateStoredDescriptionForFile,
 } from "../../../../lib/file-meta";
 import type { StoredDirectoryMetaEntry } from "../../../../lib/files-types";
 import {
@@ -114,6 +116,34 @@ export async function GET(_request: Request, { params }: RouteContext) {
 	}
 }
 
+export async function PATCH(request: Request, { params }: RouteContext) {
+	try {
+		const { path: pathSegments = [] } = await params;
+		const [sectionId, ...filePath] = pathSegments;
+		const section = getSectionById(config.sections, sectionId);
+		invariant(section, "section");
+
+		const body = (await request.json()) as { description?: unknown };
+		const description =
+			typeof body.description === "string"
+				? body.description
+				: body.description == null
+					? null
+					: undefined;
+		invariant(description !== undefined, "description must be a string or null");
+
+		await updateStoredDescriptionForFile(section, filePath, description);
+		const storedMeta = await readStoredMetaForFile(section, filePath);
+
+		return NextResponse.json({
+			ok: true,
+			description: normalizeStoredDescription(storedMeta?.description) ?? null,
+		});
+	} catch (error) {
+		return NextResponse.json(jsonError(error), { status: 500 });
+	}
+}
+
 async function getMetaByJson(
 	section: ConfigSection,
 	filePath: string[],
@@ -159,6 +189,7 @@ async function readMetaFromStorage(
 		...fileMeta,
 		width: fileMeta.COMPUTED.Width,
 		height: fileMeta.COMPUTED.Height,
+		description: normalizeStoredDescription(fileMeta.description),
 	};
 }
 

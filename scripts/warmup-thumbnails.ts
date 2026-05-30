@@ -6,6 +6,8 @@ import process from "process";
 import invariant from "tiny-invariant";
 import config from "../lib/config.ts";
 import { closeRedisClient } from "../lib/cache.ts";
+import { closeDescriptionQueue, DescriptionQueue, validateDescriptionQueueConnection } from "../lib/description-queue.ts";
+import { descriptionJobActions } from "../lib/description-jobs.ts";
 import { joinSectionPath } from "../lib/files.ts";
 import {
 	serializeSectionForWorker,
@@ -18,8 +20,10 @@ import {
 } from "../lib/thumb-queue.ts";
 import {
 	hasExifOrientationTransform,
+	normalizeStoredDescription,
 	readStoredMetaForFile,
 } from "../lib/file-meta.ts";
+import { isAutoDescriptionEnabled } from "../lib/image-description.ts";
 import {
 	closeThumbKvClient,
 	hasStoredSectionThumb,
@@ -51,6 +55,9 @@ async function main() {
 	}
 	console.log("Validating BullMQ connection...");
 	await validateThumbQueueConnection();
+	if (isAutoDescriptionEnabled()) {
+		await validateDescriptionQueueConnection();
+	}
 	console.log("BullMQ connection OK.");
 	console.log("Scanning folders recursively...");
 	const scanStats = { directories: 0, files: 0 };
@@ -59,6 +66,7 @@ async function main() {
 	let failed = 0;
 	const variant = `w${thumbnailTargetWidth}-jpeg`;
 	const queue = new ThumbQueue();
+	const descriptionQueue = new DescriptionQueue();
 	await scanCollectionFiles(section, [], scanStats, async (filePath, index) => {
 		const progressLabel = `[${index}]`;
 		const fullPath = joinSectionPath(section.path, filePath);
@@ -86,16 +94,34 @@ async function main() {
 				console.log(`skip ${progressLabel} ${filePath.join("/")} (already indexed)`);
 				return;
 			}
-			const job = await queue.enqueue({
-				action: thumbJobActions.warmSectionFile,
-				sectionId,
-				section: serializeSectionForWorker(section),
-				filePath,
-				variant,
-				force: indexState.force,
-			});
+			const queuePayload =
+				indexState.reason === "missing-description"
+					? {
+							action: descriptionJobActions.generateImageDescription,
+							sectionId,
+							section: serializeSectionForWorker(section),
+							filePath,
+							variant,
+							force: indexState.force,
+						}
+					: {
+							action: thumbJobActions.warmSectionFile,
+							sectionId,
+							section: serializeSectionForWorker(section),
+							filePath,
+							variant,
+							force: indexState.force,
+						};
+			const job =
+				indexState.reason === "missing-description"
+					? await descriptionQueue.enqueue(queuePayload)
+					: await queue.enqueue(queuePayload);
 			if (!job) {
-				throw new Error("thumb queue is not configured");
+				throw new Error(
+					indexState.reason === "missing-description"
+						? "description queue is not configured"
+						: "thumb queue is not configured",
+				);
 			}
 			enqueued += 1;
 			console.log(
@@ -173,13 +199,19 @@ async function getIndexState(
 		hasStoredSectionThumb(sectionId, section, filePath, variant),
 		readStoredMetaForFile(section, filePath),
 	]);
+	const hasDescription = Boolean(normalizeStoredDescription(storedMeta?.description));
+	const needsDescription = !isVideoPath(filePath) && isAutoDescriptionEnabled() && !hasDescription;
 
-	if (hasThumb && storedMeta) {
+	if (hasThumb && storedMeta && !needsDescription) {
 		return { shouldEnqueue: false, reason: "already-indexed", force: false };
 	}
 
 	if (!hasThumb && !storedMeta) {
 		return { shouldEnqueue: true, reason: "missing-thumb-and-metadata", force: false };
+	}
+
+	if (needsDescription) {
+		return { shouldEnqueue: true, reason: "missing-description", force: false };
 	}
 
 	return {
@@ -261,6 +293,7 @@ main()
 	})
 	.finally(async () => {
 		await closeThumbQueue();
+		await closeDescriptionQueue();
 		await closeThumbKvClient();
 		await closeRedisClient();
 	});

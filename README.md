@@ -12,7 +12,7 @@ yarn dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-### Optional Kvrocks cache, Redis queue, BullMQ worker, and thumbnail store
+### Optional Kvrocks cache, Redis queues, BullMQ workers, thumbnail store, and Ollama captions
 
 Folder listings used by `/api/files/...` can be cached in Kvrocks during local development, generated thumbnails for sections without `thumbPath` are persisted there, and BullMQ jobs can now be drained by a dedicated permanent worker.
 BullMQ now uses a dedicated Redis instance, while Kvrocks remains available for the folder cache and thumbnail blob store.
@@ -21,10 +21,10 @@ Set `REDIS_FOLDER_CACHE_TTL_SECONDS=0` to keep cached entries forever.
 ```bash
 cp .env.example .env.local
 cp .env.example .env
-docker compose up -d kvrocks redis media-worker
+docker compose up -d kvrocks redis media-worker description-worker
 ```
 
-The scanner and worker scripts (`warmup:thumbs`, `queue:scan`, `worker:media`) load `.env` automatically via `dotenv`, so queue/cache settings apply even when you run them directly with `npm run ...`.
+The scanner and worker scripts (`warmup:thumbs`, `queue:scan`, `worker:media`, `worker:description`) load `.env` automatically via `dotenv`, so queue/cache settings apply even when you run them directly with `npm run ...`.
 
 The worker container expects the media root to be mounted at the same Linux path used by `config.json` (defaults to `/media/nas/photo` inside the container). On macOS/Docker Desktop the host path now defaults to `/Volumes/photo`; override `MEDIA_ROOT_HOST_PATH` in `.env` if your library is mounted somewhere else, and make sure that host path is shared with Docker.
 
@@ -33,7 +33,9 @@ By default:
 - `REDIS_URL` is used for the folder cache and should point at Kvrocks on port `6666`
 - `THUMB_KV_URL` is used for thumbnail/blob metadata storage and should point at Kvrocks on port `6666`
 - `THUMB_QUEUE_URL` and `BULLMQ_REDIS_URL` point at the dedicated Redis container on port `6379`
-- `MEDIA_WORKER_*` overrides are available if the worker container needs different in-network URLs than your local host setup
+- `DESCRIPTION_QUEUE_URL` / `DESCRIPTION_QUEUE_NAME` let caption generation run on a separate BullMQ queue from thumbnail warmup
+- `OLLAMA_BASE_URL` and `OLLAMA_MODEL` control automatic image descriptions; the Docker `description-worker` service starts its own Ollama daemon, bootstraps the Ollama binary on first start, and uses `DESCRIPTION_WORKER_OLLAMA_BASE_URL`
+- `MEDIA_WORKER_*` and `DESCRIPTION_WORKER_*` overrides are available if the worker containers need different in-network URLs than your local host setup
 
 Restart Kvrocks automatically when its critical config changes:
 
@@ -45,6 +47,7 @@ Sync worker code changes into the container and restart it automatically:
 
 ```bash
 docker compose watch media-worker
+docker compose watch description-worker
 ```
 
 Scan an entire collection locally and enqueue thumbnail jobs for all nested folders:
@@ -54,7 +57,15 @@ npm run warmup:thumbs -- 5
 npm run warmup:thumbs -- "P:/Photos"
 ```
 
-`npm run warmup:thumbs` and `npm run queue:scan` both enqueue jobs only; the actual thumbnail and metadata processing now happens in the BullMQ worker.
+`npm run warmup:thumbs` and `npm run queue:scan` both enqueue jobs only; thumbnail/metadata work runs in `worker:media`, while description generation runs in `worker:description`.
+
+Description jobs use their own BullMQ queue (`DESCRIPTION_QUEUE_NAME`, default
+`description-jobs`) and their own worker concurrency (`DESCRIPTION_WORKER_CONCURRENCY`,
+default `1`), so caption generation does not block thumbnail warmup. Set `OLLAMA_MODEL`
+to a vision-capable model that your Ollama instance can run; the bundled `description-worker`
+container bootstraps the Ollama binary on first start, runs `ollama serve`, pulls that model,
+and then drains the description queue. Rerun `npm run warmup:thumbs -- <collection>` to
+backfill missing image descriptions. Existing manual descriptions are preserved.
 
 You can also queue an entire collection from inside the worker container:
 
@@ -63,7 +74,9 @@ npm run queue:scan -- 5
 docker compose run --rm media-worker npm run queue:scan -- 5
 ```
 
-The permanent worker entrypoint is `npm run worker:media`, and `node test/queue-processor.ts` is available as a one-shot queue drainer for local debugging.
+The permanent worker entrypoints are `npm run worker:media` for thumbs/EXIF/meta and
+`npm run worker:description` for Ollama descriptions. `node test/queue-processor.ts` is
+available as a one-shot queue drainer for local debugging.
 
 You can start editing the main gallery UI in `app/page.tsx` and the colocated client components under `app/_components/`. The page auto-updates as you edit the file.
 

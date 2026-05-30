@@ -3,17 +3,12 @@ import path from "path";
 import { NextResponse } from "next/server";
 import config from "../../../lib/config";
 import { jsonError } from "../../../lib/api-route";
-import { getThumbQueue } from "../../../lib/thumb-queue";
+import { getQueueInfo } from "../../../lib/queue-info";
 import {
 	getThumbKvClient,
 	thumbKvPrefix,
 	thumbKvUrl,
 } from "../../../lib/thumb-store";
-import {
-	thumbQueueName,
-	thumbQueuePrefix,
-	thumbQueueUrl,
-} from "../../../lib/thumb-jobs";
 
 export const runtime = "nodejs";
 
@@ -32,55 +27,6 @@ export async function GET() {
 	} catch (error) {
 		return NextResponse.json(jsonError(error), { status: 500 });
 	}
-}
-
-async function getQueueInfo() {
-	const queue = await getThumbQueue();
-	if (!queue) {
-		return {
-			configured: false,
-			connectionUrl: thumbQueueUrl || null,
-			name: thumbQueueName,
-			prefix: thumbQueuePrefix,
-			counts: emptyQueueCounts(),
-			totalQueued: 0,
-			totalProcessed: 0,
-		};
-	}
-
-	const counts = await queue.getJobCounts(
-		"waiting",
-		"active",
-		"delayed",
-		"completed",
-		"failed",
-		"paused",
-	);
-
-	return {
-		configured: true,
-		connectionUrl: thumbQueueUrl || null,
-		name: thumbQueueName,
-		prefix: thumbQueuePrefix,
-		counts,
-		totalQueued:
-			(counts.waiting ?? 0) +
-			(counts.active ?? 0) +
-			(counts.delayed ?? 0) +
-			(counts.paused ?? 0),
-		totalProcessed: (counts.completed ?? 0) + (counts.failed ?? 0),
-	};
-}
-
-function emptyQueueCounts() {
-	return {
-		waiting: 0,
-		active: 0,
-		delayed: 0,
-		completed: 0,
-		failed: 0,
-		paused: 0,
-	};
 }
 
 async function getThumbStorageInfo() {

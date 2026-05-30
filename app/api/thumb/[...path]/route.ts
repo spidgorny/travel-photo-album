@@ -3,7 +3,13 @@ import fs from "fs";
 import { Readable } from "stream";
 import invariant from "tiny-invariant";
 import config from "../../../../lib/config";
-import { readStoredMetaForFile } from "../../../../lib/file-meta";
+import { DescriptionQueue } from "../../../../lib/description-queue";
+import { descriptionJobActions } from "../../../../lib/description-jobs";
+import {
+	normalizeStoredDescription,
+	readStoredMetaForFile,
+} from "../../../../lib/file-meta";
+import { isAutoDescriptionEnabled } from "../../../../lib/image-description";
 import {
 	serializeSectionForWorker,
 	thumbJobActions,
@@ -50,10 +56,23 @@ export async function GET(_request: Request, { params }: RouteContext) {
 			),
 			shouldWarmMetadata ? readStoredMetaForFile(section, filePath) : Promise.resolve(null),
 		]);
+		const missingDescription =
+			shouldWarmMetadata &&
+			isAutoDescriptionEnabled() &&
+			!normalizeStoredDescription(storedMeta?.description);
 		if (shouldWarmMetadata && !storedMeta) {
 			const queue = new ThumbQueue();
 			await queue.enqueue({
 				action: thumbJobActions.warmSectionFile,
+				sectionId: numericSectionId,
+				section: serializeSectionForWorker(section),
+				filePath,
+				variant,
+			});
+		} else if (missingDescription) {
+			const descriptionQueue = new DescriptionQueue();
+			await descriptionQueue.enqueue({
+				action: descriptionJobActions.generateImageDescription,
 				sectionId: numericSectionId,
 				section: serializeSectionForWorker(section),
 				filePath,
