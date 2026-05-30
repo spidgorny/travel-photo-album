@@ -41,6 +41,8 @@ export interface MetaResponse {
 }
 
 export interface GalleryPhoto extends FilesApiEntry {
+	key: string;
+	src: string;
 	source: {
 		regular: string;
 		thumbnail: string;

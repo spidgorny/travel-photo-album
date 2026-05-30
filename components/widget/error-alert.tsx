@@ -1,5 +1,3 @@
-import { Alert } from "react-bootstrap";
-
 interface ErrorAlertProps {
 	error?: unknown;
 }
@@ -17,5 +15,9 @@ function getErrorMessage(error: unknown) {
 }
 
 export function ErrorAlert({ error }: ErrorAlertProps) {
-	return <Alert variant="danger">{getErrorMessage(error)}</Alert>;
+	return (
+		<div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+			{getErrorMessage(error)}
+		</div>
+	);
 }

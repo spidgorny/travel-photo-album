@@ -106,7 +106,9 @@ async function getMetaByJson(
 section: ConfigSection,
 filePath: string[],
 ): Promise<JsonMetaData | null> {
-invariant(section.thumbPath, "section.thumbPath");
+if (!section.thumbPath) {
+	return null;
+}
 const fullPath = joinSectionPath(section.thumbPath, filePath);
 const metaFile = path.posix.join(path.dirname(fullPath), "meta.json");
 

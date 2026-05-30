@@ -7,7 +7,7 @@ interface CenterProps {
 
 export function Center({ children }: CenterProps) {
 	return (
-		<HStack className="vh-100 justify-content-center">
+		<HStack className="min-h-screen justify-center">
 			<div>{children}</div>
 		</HStack>
 	);

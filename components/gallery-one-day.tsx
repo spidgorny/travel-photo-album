@@ -5,7 +5,6 @@ import useSWR from "swr";
 import Carousel, { Modal, ModalGateway } from "react-images";
 import Gallery from "react-photo-gallery";
 import { fetcher } from "../lib/http";
-import { HStack } from "./widget/hstack";
 import { Loading } from "./widget/loading";
 import type { FilesResponse, GalleryPhoto, MetaResponse } from "./ui-types";
 
@@ -30,6 +29,9 @@ interface ImageRendererProps {
 
 type PhotoGalleryComponentProps = {
 	photos: GalleryPhoto[];
+	direction?: "row" | "column";
+	margin?: number;
+	targetRowHeight?: number;
 	onClick: (_event: MouseEvent<HTMLElement>, args: LightboxArgs) => void;
 	renderImage: (props: ImageRendererProps) => ReactNode;
 };
@@ -58,31 +60,33 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 	}, []);
 
 	const photos = useMemo<GalleryPhoto[]>(() => {
-		console.log("remap photos", date);
 		const files = Array.isArray(data?.files) ? data.files : [];
 
 		return files.map((file) => {
 			const filePath = typeof file.path === "string" ? file.path : "";
 			const src = `/api/photo/${sectionId}/${folder}/${filePath}`;
 			const thumbSrc = `/api/thumb/${sectionId}/${folder}/${filePath}`;
+			const photoKey = `${sectionId}:${folder}:${filePath}`;
+			const fileName = filePath.split("/").at(-1) ?? filePath;
 
 			return {
 				...file,
+				key: photoKey,
+				src,
 				source: {
 					regular: src,
 					thumbnail: thumbSrc,
 				},
 				width: 3,
 				height: 2,
-				caption: src,
+				caption: fileName,
 			};
 		});
-	}, [data, date, folder, sectionId]);
+	}, [data, folder, sectionId]);
 
 	const [dimensions, setDimensions] = useState<GalleryPhoto[]>(photos);
 
 	useEffect(() => {
-		console.log("remap dimensions", date);
 		setDimensions(photos);
 
 		let cancelled = false;
@@ -104,10 +108,6 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 					continue;
 				}
 
-				if (date === "2020-07-26") {
-					console.log(meta);
-				}
-
 				const width =
 					meta.COMPUTED?.Width ?? meta.COMPUTED?.width ?? meta.dimensions?.width ?? 3;
 				const height =
@@ -119,10 +119,6 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 					height,
 					original: { width, height },
 				};
-
-				if (date === "2020-07-26") {
-					console.log(meta, newDim);
-				}
 
 				setDimensions((old) => {
 					const baseline = old.length ? old : photos;
@@ -143,7 +139,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 
 		return (
 			<SelectedImage
-				key={key}
+				key={key ?? photo.key}
 				margin="2px"
 				index={index}
 				photo={photo}
@@ -155,16 +151,23 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 	};
 
 	return (
-		<div>
-			<div>
-				apiUrl: <a href={apiUrl}>{apiUrl}</a>
-			</div>
-			<div>data?.files?: {data?.files?.length ?? 0}</div>
-			<div>Dimensions: {dimensions.length}</div>
-			{!data && <Loading />}
+		<div className="space-y-4">
+			{!data && (
+				<div className="flex min-h-[12rem] items-center justify-center rounded-3xl border border-dashed border-white/10 bg-slate-950/40">
+					<Loading />
+				</div>
+			)}
+			{data && !dimensions.length && (
+				<div className="rounded-3xl border border-dashed border-white/10 bg-slate-950/40 px-4 py-8 text-center text-sm text-slate-400">
+					No photos matched this day.
+				</div>
+			)}
 			{!!dimensions.length && (
 				<PhotoGallery
 					photos={dimensions}
+					direction="row"
+					margin={2}
+					targetRowHeight={300}
 					onClick={openLightbox}
 					renderImage={imageRenderer}
 				/>
@@ -174,7 +177,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 					<Modal onClose={closeLightbox}>
 						<Carousel
 							currentIndex={currentImage}
-							views={photos.map((photo) => ({ ...photo }))}
+							views={dimensions.map((photo) => ({ ...photo }))}
 						/>
 					</Modal>
 				) : null}
@@ -194,38 +197,43 @@ interface SelectedImageProps {
 }
 
 function SelectedImage({ index, photo, margin, selected, onClick }: SelectedImageProps) {
-	const cont: CSSProperties = {
-		backgroundColor: "#eee",
+	const fileName = photo.path.split("/").at(-1) ?? photo.caption ?? "Photo";
+	const dimensionLabel =
+		photo.original?.width && photo.original?.height
+			? `${photo.original.width.toFixed(0)} x ${photo.original.height.toFixed(0)}`
+			: null;
+	const containerStyle: CSSProperties = {
 		cursor: "pointer",
+		margin,
 		overflow: "hidden",
 		position: "relative",
-		border: "solid 3px white",
+		width: photo.width,
 	};
-	const imgStyle: CSSProperties = {};
-	const selectedImgStyle: CSSProperties = {};
 
 	return (
 		<div
-			style={{ margin, height: photo.height + 30, width: photo.width, ...cont }}
-			className={!selected ? "not-selected" : ""}
+			style={containerStyle}
+			className={[
+				"group overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-lg shadow-black/20 transition duration-200 hover:-translate-y-0.5 hover:border-sky-300/40",
+				selected ? "ring-2 ring-sky-300/60" : "",
+			].join(" ")}
 		>
 			<img
-				src={photo.source.regular}
+				src={photo.source.thumbnail}
 				title={photo.title ?? photo.caption}
 				alt={photo.title ?? photo.caption}
-				style={selected ? { ...imgStyle, ...selectedImgStyle } : { ...imgStyle }}
 				onClick={(event) => onClick(event, { photo, index })}
 				width={photo.width}
 				height={photo.height}
+				loading="lazy"
+				className="block h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
 			/>
-			<style>{`.not-selected:hover{outline:2px solid #06befa}`}</style>
-			<HStack className="text-black">
-				<div>{photo.source.regular.split("/").slice(-1)[0]}</div>
-				<div>
-					{photo.original?.width?.toFixed(0)}x
-					{photo.original?.height?.toFixed(0)}
+			<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent px-3 pb-3 pt-10">
+				<div className="truncate text-sm font-medium text-white">{fileName}</div>
+				<div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-300/80">
+					{dimensionLabel ?? "Photo"}
 				</div>
-			</HStack>
+			</div>
 		</div>
 	);
 }
