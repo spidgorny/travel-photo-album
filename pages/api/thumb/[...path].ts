@@ -1,6 +1,7 @@
 import type { NextApiHandler } from "next";
-import fs, { type ReadStream } from "fs";
+import fs from "fs";
 import path from "path";
+import { Readable } from "stream";
 import mime from "mime-types";
 import sharp from "sharp";
 import FfmpegCommand from "fluent-ffmpeg";
@@ -15,56 +16,60 @@ import { joinSectionPath } from "../../../lib/files.mjs";
 
 interface StreamInfo {
 mimeType: string;
-stream: ReadStream;
+stream: Readable;
 headers: Record<string, string>;
 }
 
 type ThumbErrorResponse = ReturnType<typeof jsonError>;
 
 const handler: NextApiHandler<ThumbErrorResponse> = async (req, res) => {
-try {
-const [sectionId, ...filePath] = getCatchAllSegments(req.query.path);
-const section = getSectionById(config.sections, sectionId);
-invariant(section, "section");
-invariant(section.path, "section.path");
-invariant(section.thumbPath, "section.thumbPath");
+	try {
+		const [sectionId, ...filePath] = getCatchAllSegments(req.query.path);
+		const section = getSectionById(config.sections, sectionId);
+		invariant(section, "section");
+		invariant(section.path, "section.path");
 
-let streamInfo: StreamInfo;
-if (isVideo(filePath.join("/"))) {
-streamInfo = await makeVideoThumb(section.path, section.thumbPath, filePath);
-} else {
-try {
-streamInfo = tryThumbFile(section.thumbPath, filePath);
-} catch (error) {
-const err = error instanceof Error ? error : new Error("Unknown error");
-if (!err.message.startsWith("ENOENT")) {
-throw err;
-}
-try {
-streamInfo = tryThumbFile(section.thumbPath, filePath, ".webp");
-} catch (webpError) {
-const err =
-webpError instanceof Error
-? webpError
-: new Error("Unknown error");
-if (!err.message.startsWith("ENOENT")) {
-throw err;
-}
-streamInfo = await tryToResize(section.path, section.thumbPath, filePath);
-}
-}
-}
+		let streamInfo: StreamInfo;
+		if (isVideo(filePath.join("/"))) {
+			if (!section.thumbPath) {
+				throw new Error("section.thumbPath is required for video thumbnails");
+			}
+			streamInfo = await makeVideoThumb(section.path, section.thumbPath, filePath);
+		} else if (!section.thumbPath) {
+			streamInfo = await makeOnDemandThumb(section.path, filePath);
+		} else {
+			try {
+				streamInfo = tryThumbFile(section.thumbPath, filePath);
+			} catch (error) {
+				const err = error instanceof Error ? error : new Error("Unknown error");
+				if (!err.message.startsWith("ENOENT")) {
+					throw err;
+				}
+				try {
+					streamInfo = tryThumbFile(section.thumbPath, filePath, ".webp");
+				} catch (webpError) {
+					const err =
+						webpError instanceof Error
+							? webpError
+							: new Error("Unknown error");
+					if (!err.message.startsWith("ENOENT")) {
+						throw err;
+					}
+					streamInfo = await tryToResize(section.path, section.thumbPath, filePath);
+				}
+			}
+		}
 
-res.setHeader("Content-Type", streamInfo.mimeType);
-Object.entries(streamInfo.headers).forEach(([key, value]) => {
-res.setHeader(key, value);
-});
-res.status(200);
-res.setHeader("Cache-Control", "s-maxage=86400, public");
-streamInfo.stream.pipe(res);
-} catch (error) {
-res.status(500).json(jsonError(error));
-}
+		res.setHeader("Content-Type", streamInfo.mimeType);
+		Object.entries(streamInfo.headers).forEach(([key, value]) => {
+			res.setHeader(key, value);
+		});
+		res.status(200);
+		res.setHeader("Cache-Control", "s-maxage=86400, public");
+		streamInfo.stream.pipe(res);
+	} catch (error) {
+		res.status(500).json(jsonError(error));
+	}
 };
 
 function tryThumbFile(
@@ -104,8 +109,22 @@ headers: { "X-Thumb": "resize" },
 };
 }
 
+async function makeOnDemandThumb(
+sectionPath: string,
+filePath: string[],
+): Promise<StreamInfo> {
+const largeFile = joinSectionPath(sectionPath, filePath);
+const buffer = await sharp(largeFile).resize({ width: 256 }).jpeg().toBuffer();
+
+return {
+	mimeType: "image/jpeg",
+	stream: Readable.from(buffer),
+	headers: { "X-Thumb": "resize-memory" },
+};
+}
+
 function isVideo(fullPath: string): boolean {
-return fullPath.toLowerCase().endsWith("mp4");
+	return fullPath.toLowerCase().endsWith("mp4");
 }
 
 async function makeVideoThumb(
@@ -114,34 +133,34 @@ thumbRoot: string,
 filePath: string[],
 ): Promise<StreamInfo> {
 return new Promise((resolve, reject) => {
-try {
-resolve(tryThumbFile(thumbRoot, filePath, ".webp"));
-} catch {
-const fullPath = joinSectionPath(sectionPath, filePath);
-const thumbPath = joinSectionPath(thumbRoot, filePath);
-const screenshotConfig = {
-count: 1,
-folder: path.dirname(thumbPath),
-filename: path.basename(thumbPath),
-size: "320x240",
-timestamps: ["50%"],
-};
-new FfmpegCommand(fullPath)
-.screenshots(screenshotConfig)
-.on("end", () => {
-const mimeType = mime.lookup(thumbPath) || "application/octet-stream";
-fs.accessSync(thumbPath, fs.constants.R_OK);
-const stream = fs.createReadStream(thumbPath);
-resolve({
-mimeType,
-stream,
-headers: { "X-Thumb": "ffmpeg" },
-});
-})
-.on("error", (error: unknown) => {
-reject(error instanceof Error ? error : new Error("Unknown error"));
-});
-}
+	try {
+		resolve(tryThumbFile(thumbRoot, filePath, ".webp"));
+	} catch {
+		const fullPath = joinSectionPath(sectionPath, filePath);
+		const thumbPath = joinSectionPath(thumbRoot, filePath);
+		const screenshotConfig = {
+			count: 1,
+			folder: path.dirname(thumbPath),
+			filename: path.basename(thumbPath),
+			size: "320x240",
+			timestamps: ["50%"],
+		};
+		new FfmpegCommand(fullPath)
+			.screenshots(screenshotConfig)
+			.on("end", () => {
+				const mimeType = mime.lookup(thumbPath) || "application/octet-stream";
+				fs.accessSync(thumbPath, fs.constants.R_OK);
+				const stream = fs.createReadStream(thumbPath);
+				resolve({
+					mimeType,
+					stream,
+					headers: { "X-Thumb": "ffmpeg" },
+				});
+			})
+			.on("error", (error: unknown) => {
+				reject(error instanceof Error ? error : new Error("Unknown error"));
+			});
+	}
 });
 }
 

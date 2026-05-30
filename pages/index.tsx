@@ -1,10 +1,10 @@
 import Head from "next/head";
+import type { ChangeEvent } from "react";
 import { useRouter } from "next/router";
 import type { GetServerSideProps } from "next";
 import config from "../lib/config.js";
 import { GalleryFor } from "../components/gallery";
 import { SectionFolders } from "../components/nav/section-folders";
-import { SectionsNav } from "../components/nav/sections-nav";
 import { firstQueryValue, type UISection } from "../components/ui-types";
 
 interface HomeProps {
@@ -19,6 +19,22 @@ export default function Home({ sections = [] }: HomeProps) {
 	const section = sections[activeSectionId];
 	const folder = firstQueryValue(router.query.folder) ?? "";
 	const locationLabel = folder ? folder.split("/").join(" / ") : "Choose a folder to browse";
+	const selectedSectionValue = activeSectionId >= 0 ? String(activeSectionId) : "";
+
+	const handleSectionChange = (event: ChangeEvent<HTMLSelectElement>) => {
+		const nextSection = event.target.value;
+		if (!nextSection) {
+			void router.push("/");
+			return;
+		}
+
+		void router.push({
+			pathname: "/",
+			query: {
+				section: nextSection,
+			},
+		});
+	};
 
 	return (
 		<>
@@ -33,35 +49,43 @@ export default function Home({ sections = [] }: HomeProps) {
 
 			<div className="relative overflow-hidden">
 				<div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.18),_transparent_55%)]" />
-				<main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-6 px-4 py-6 lg:px-6 xl:px-8">
-					<header className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-sky-950/20 backdrop-blur-xl">
-						<div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-							<div className="max-w-3xl space-y-3">
+				<main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-5 px-4 py-5 lg:px-6 xl:px-8">
+					<header className="rounded-[1.75rem] border border-white/10 bg-white/5 px-5 py-4 shadow-2xl shadow-sky-950/20 backdrop-blur-xl">
+						<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+							<div className="max-w-2xl space-y-2">
 								<div className="inline-flex items-center rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-sky-200">
 									Travel Photo Album
 								</div>
-								<h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-									Your photo archive, organized like a polished gallery.
+								<h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+									Browse your travel archive in one place.
 								</h1>
-								<p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-									Move between trips, drill into folders, and browse each day in a
-									clean filmstrip-style layout optimized for large photo collections.
+								<p className="text-sm leading-6 text-slate-300">
+									Switch trips from the header, expand the folder tree, and scan each day side by side with the gallery.
 								</p>
 							</div>
-							<div className="grid gap-3 sm:grid-cols-2">
-								<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3">
+							<div className="grid gap-3 md:grid-cols-[minmax(260px,320px),minmax(220px,1fr)]">
+								<label className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3">
 									<div className="text-xs uppercase tracking-[0.2em] text-slate-400">
-										Active section
+										Travel collection
 									</div>
-									<div className="mt-2 text-base font-medium text-white">
-										{section?.name ?? "No section selected"}
-									</div>
-								</div>
+									<select
+										value={selectedSectionValue}
+										onChange={handleSectionChange}
+										className="mt-2 w-full rounded-xl border border-white/10 bg-slate-900/90 px-3 py-2.5 text-sm font-medium text-white outline-none transition focus:border-sky-300/50"
+									>
+										<option value="">Select a travel collection</option>
+										{sections.map((candidateSection, index) => (
+											<option key={candidateSection.id ?? index} value={index}>
+												{candidateSection.name}
+											</option>
+										))}
+									</select>
+								</label>
 								<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3">
 									<div className="text-xs uppercase tracking-[0.2em] text-slate-400">
 										Current path
 									</div>
-									<div className="mt-2 truncate text-base font-medium text-slate-200">
+									<div className="mt-2 truncate text-sm font-medium text-slate-200 sm:text-base">
 										{locationLabel}
 									</div>
 								</div>
@@ -69,25 +93,12 @@ export default function Home({ sections = [] }: HomeProps) {
 						</div>
 					</header>
 
-					<div className="grid flex-1 gap-6 xl:grid-cols-[320px,minmax(0,1fr)]">
-						<aside className="h-fit rounded-[2rem] border border-white/10 bg-slate-950/55 p-5 shadow-xl shadow-black/20 backdrop-blur xl:sticky xl:top-6">
-							<div className="space-y-6">
-								<section className="space-y-3">
-									<div>
-										<h2 className="text-lg font-semibold text-white">Trips</h2>
-										<p className="text-sm text-slate-400">
-											Select a travel collection to explore.
-										</p>
-									</div>
-									<SectionsNav sections={sections} sectionId={activeSectionId} />
-								</section>
-								<section className="border-t border-white/10 pt-5">
-									<SectionFolders section={section} folder={folder} />
-								</section>
-							</div>
+					<div className="flex flex-1 flex-col gap-5 md:flex-row md:items-start">
+						<aside className="h-fit rounded-[1.75rem] border border-white/10 bg-slate-950/55 p-4 shadow-xl shadow-black/20 backdrop-blur md:sticky md:top-5 md:w-[320px] md:shrink-0">
+							<SectionFolders section={section} folder={folder} />
 						</aside>
 
-						<section className="rounded-[2rem] border border-white/10 bg-slate-950/45 p-4 shadow-xl shadow-black/20 backdrop-blur sm:p-6">
+						<section className="min-w-0 flex-1 rounded-[1.75rem] border border-white/10 bg-slate-950/45 p-4 shadow-xl shadow-black/20 backdrop-blur sm:p-5">
 							{section ? (
 								<GalleryFor section={section} folder={folder} />
 							) : (
