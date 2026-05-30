@@ -12,6 +12,10 @@ import {
 	toError,
 } from "../../../../lib/api-route";
 import { joinSectionPath } from "../../../../lib/files";
+import {
+	thumbJobActions,
+	type ThumbImageMetaData,
+} from "../../../../lib/thumb-jobs";
 import { ThumbQueue } from "../../../../lib/thumb-queue";
 
 interface MetaComputedDimensions {
@@ -77,10 +81,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
 	try {
 		const section = getSectionById(config.sections, sectionId);
 		invariant(section, "section");
+		const numericSectionId = Number(sectionId);
 
 		let metaData: MetaData | null = await getMetaByJson(section, filePath);
 		if (!metaData) {
-			metaData = await getMetaByFile(section, filePath);
+			metaData = await getMetaByFile(numericSectionId, section, filePath);
 		}
 
 		return NextResponse.json(metaData, {
@@ -142,18 +147,19 @@ async function getMetaByJson(
 }
 
 async function getMetaByFile(
+	sectionId: number,
 	section: ConfigSection,
 	filePath: string[],
 ): Promise<FileMetaData | VideoMetaData> {
 	if (isVideo(filePath.join("/"))) {
-		return getVideoMeta(section, filePath);
+		return getVideoMeta(sectionId, section, filePath);
 	}
 	invariant(section.path, "section.path");
 	const fullPath = joinSectionPath(section.path, filePath);
 	const mimeType = mime.lookup(fullPath);
 	const dimensions = sizeOf(fs.readFileSync(fullPath));
 
-	const metaData: FileMetaData = {
+	const metaData: ThumbImageMetaData = {
 		FileName: path.basename(fullPath),
 		MimeType: mimeType,
 		FileSize: fs.statSync(fullPath).size,
@@ -166,13 +172,13 @@ async function getMetaByFile(
 
 	const queue = new ThumbQueue();
 	await queue.enqueue({
-		action: "get-meta-for-file",
-		section,
+		action: thumbJobActions.getMetaForFile,
+		sectionId,
 		filePath,
 		metaData,
 	});
 
-	return metaData;
+	return metaData as FileMetaData;
 }
 
 function isVideo(fullPath: string): boolean {
@@ -180,6 +186,7 @@ function isVideo(fullPath: string): boolean {
 }
 
 async function getVideoMeta(
+	sectionId: number,
 	section: ConfigSection,
 	filePath: string[],
 ): Promise<VideoMetaData> {
@@ -194,8 +201,8 @@ async function getVideoMeta(
 
 			const queue = new ThumbQueue();
 			await queue.enqueue({
-				action: "store-meta-for-video",
-				section,
+				action: thumbJobActions.storeMetaForVideo,
+				sectionId,
 				filePath,
 				data,
 			});

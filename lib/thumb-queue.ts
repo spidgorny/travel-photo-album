@@ -1,59 +1,89 @@
-// @ts-nocheck
-import fs from "fs";
-import path from "path";
 import crypto from "crypto";
+import { Queue, type ConnectionOptions, type JobsOptions } from "bullmq";
+import {
+	thumbQueueName,
+	thumbQueuePrefix,
+	thumbQueueUrl,
+	type ThumbJobData,
+} from "./thumb-jobs.ts";
+
+let thumbQueue: Queue | null = null;
+let thumbQueueWarningWasShown = false;
+
+function warnThumbQueue(message: string, error: Error | null = null) {
+	if (thumbQueueWarningWasShown) {
+		return;
+	}
+	thumbQueueWarningWasShown = true;
+	console.warn("thumb-queue", message, error?.message ?? "");
+}
+
+export function createThumbQueueConnection() {
+	if (!thumbQueueUrl) {
+		return null;
+	}
+	const url = new URL(thumbQueueUrl);
+	const db = url.pathname.length > 1 ? Number(url.pathname.slice(1)) : undefined;
+	const connection: ConnectionOptions = {
+		host: url.hostname,
+		port: url.port ? Number(url.port) : 6379,
+		username: url.username || undefined,
+		password: url.password || undefined,
+		db: typeof db === "number" && !Number.isNaN(db) ? db : undefined,
+		enableReadyCheck: false,
+		maxRetriesPerRequest: null,
+	};
+	if (url.protocol === "rediss:") {
+		connection.tls = {};
+	}
+	return connection;
+}
+
+export async function getThumbQueue() {
+	if (!thumbQueueUrl) {
+		warnThumbQueue("queue disabled; set THUMB_QUEUE_URL, THUMB_KV_URL, or REDIS_URL");
+		return null;
+	}
+	const connection = createThumbQueueConnection();
+	if (!connection) {
+		return null;
+	}
+	if (!thumbQueue) {
+		thumbQueue = new Queue(thumbQueueName, {
+			connection,
+			prefix: thumbQueuePrefix,
+			defaultJobOptions: {
+				attempts: 3,
+				removeOnComplete: 1000,
+				removeOnFail: 1000,
+			},
+		});
+	}
+	return thumbQueue;
+}
+
+export async function closeThumbQueue() {
+	if (thumbQueue) {
+		await thumbQueue.close().catch(() => {});
+		thumbQueue = null;
+	}
+}
 
 export class ThumbQueue {
-
-	queueRoot = './queue';
-
-	constructor({queueRoot} = {}) {
-		if (queueRoot) {
-			this.queueRoot = queueRoot;
-		}
-		fs.mkdirSync(this.queueRoot, {recursive: true});
-	}
-
-	async enqueue(data) {
-		const hash = this.makeHash(data);
-		const fileName = path.posix.join(this.queueRoot, hash + '.json');
-		try {
-			// fs.accessSync(fileName, fs.constants.W_OK);
-			fs.writeFileSync(fileName, JSON.stringify(data, null, 2));
-		} catch (e) {
-			console.error(e.message);
-		}
-	}
-
-	makeHash(data) {
-		const shasum = crypto.createHash('sha1');
-		return shasum.update(JSON.stringify(data)).digest('hex');
-	}
-
-	getJob() {
-		this.readFiles();
-		if (!this.files) {
+	async enqueue(data: ThumbJobData, options: JobsOptions = {}) {
+		const queue = await getThumbQueue();
+		if (!queue) {
 			return null;
 		}
-		const jobHash = this.files[0];
-		const jobData = JSON.parse(fs.readFileSync(path.posix.join(this.queueRoot, jobHash), 'utf8'));
-		return {jobHash, ...jobData};
+		const hash = this.makeHash(data);
+		return queue.add(data.action, data, {
+			jobId: `thumb:${data.action}:${hash}`,
+			...options,
+		});
 	}
 
-	readFiles() {
-		if (!this.files) {
-			this.files = fs.readdirSync(this.queueRoot);
-		}
+	makeHash(data: ThumbJobData) {
+		const shasum = crypto.createHash("sha1");
+		return shasum.update(JSON.stringify(data)).digest("hex");
 	}
-
-	removeJob(jobHash) {
-		fs.unlinkSync(path.posix.join(this.queueRoot, jobHash));
-		this.files = this.files.filter(x => x !== jobHash);
-	}
-
-	get length() {
-		this.readFiles();
-		return this.files.length;
-	}
-
 }

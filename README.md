@@ -12,16 +12,19 @@ yarn dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-### Optional Kvrocks cache and thumbnail store
+### Optional Kvrocks cache, BullMQ worker, and thumbnail store
 
-Folder listings used by `/api/files/...` can be cached in Kvrocks during local development, and generated thumbnails for sections without `thumbPath` are persisted there as well.
-Kvrocks speaks the Redis protocol, so the existing folder cache keeps working while thumbnail blobs and dimensions are stored under a separate key prefix.
+Folder listings used by `/api/files/...` can be cached in Kvrocks during local development, generated thumbnails for sections without `thumbPath` are persisted there, and BullMQ jobs can now be drained by a dedicated permanent worker.
+Kvrocks speaks the Redis protocol, so the existing folder cache, thumbnail blob store, and BullMQ queue can share the same instance.
 Set `REDIS_FOLDER_CACHE_TTL_SECONDS=0` to keep cached entries forever.
 
 ```bash
 cp .env.example .env.local
-docker compose up -d kvrocks
+cp .env.example .env
+docker compose up -d kvrocks media-worker
 ```
+
+The worker container expects the media root to be mounted at the same Linux path used by `config.json` (defaults to `/media/nas/photo`). Override `MEDIA_ROOT_HOST_PATH` in `.env` if your host uses a different mount point.
 
 Restart Kvrocks automatically when its critical config changes:
 
@@ -29,12 +32,23 @@ Restart Kvrocks automatically when its critical config changes:
 docker compose watch kvrocks
 ```
 
-Warm an entire collection, including all nested folders, ahead of browsing:
+Scan an entire collection locally and enqueue thumbnail jobs for all nested folders:
 
 ```bash
 npm run warmup:thumbs -- 5
 npm run warmup:thumbs -- "P:/Photos"
 ```
+
+`npm run warmup:thumbs` and `npm run queue:scan` both enqueue jobs only; the actual thumbnail and metadata processing now happens in the BullMQ worker.
+
+You can also queue an entire collection from inside the worker container:
+
+```bash
+npm run queue:scan -- 5
+docker compose run --rm media-worker npm run queue:scan -- 5
+```
+
+The permanent worker entrypoint is `npm run worker:media`, and `node test/queue-processor.ts` is available as a one-shot queue drainer for local debugging.
 
 You can start editing the main gallery UI in `app/page.tsx` and the colocated client components under `app/_components/`. The page auto-updates as you edit the file.
 

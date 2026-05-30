@@ -12,5 +12,29 @@ services:
         - action: restart
           path: ./docker/kvrocks/kvrocks.conf
 
+  media-worker:
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile
+    env_file:
+      - .env
+    command: npm run worker:media
+    depends_on:
+      - kvrocks
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://kvrocks:6666}
+      THUMB_KV_URL: ${THUMB_KV_URL:-redis://kvrocks:6666}
+      THUMB_QUEUE_URL: ${THUMB_QUEUE_URL:-redis://kvrocks:6666}
+      THUMB_QUEUE_NAME: ${THUMB_QUEUE_NAME:-thumb-jobs}
+      THUMB_QUEUE_PREFIX: ${THUMB_QUEUE_PREFIX:-travel-photo-album}
+      BULLMQ_WORKER_CONCURRENCY: ${BULLMQ_WORKER_CONCURRENCY:-2}
+      THUMB_KV_PREFIX: ${THUMB_KV_PREFIX:-travel-photo-album:thumb:v1}
+      THUMB_TARGET_WIDTH: ${THUMB_TARGET_WIDTH:-256}
+      REDIS_FOLDER_CACHE_TTL_SECONDS: ${REDIS_FOLDER_CACHE_TTL_SECONDS:-0}
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ${MEDIA_ROOT_HOST_PATH:-/media/nas/photo}:${MEDIA_ROOT_CONTAINER_PATH:-/media/nas/photo}:ro
+
 volumes:
   kvrocks_data:

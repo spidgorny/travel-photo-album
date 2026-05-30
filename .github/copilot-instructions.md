@@ -7,7 +7,7 @@
 - `npm run start` serves the production build.
 - `npm run lint` is currently stale: it still runs `next lint`, but Next.js 16 no longer exposes that command. Running `npx eslint .` also fails because the repository still uses legacy `.eslintrc.json` config instead of the ESLint flat-config format required by ESLint 10.
 - There is no automated test runner configured in the root `package.json`, so there is no full-suite or single-test command to use. The `test/` directory contains ad-hoc scripts, not CI-style tests:
-  - `node test/queue-processor.mjs` processes queued metadata jobs from `./queue` and writes `meta.json` files.
+  - `node test/queue-processor.ts` drains queued BullMQ media jobs once for local debugging.
   - `node test/recache.js` is a local-only cache experiment with hard-coded photo paths.
 
 ## High-level architecture
@@ -26,10 +26,10 @@
   - `/api/photo` streams the original asset
   - `/api/thumb` serves or generates thumbnails
   - `/api/meta` returns cached metadata or extracts it from the source file
-- Thumbnail and metadata generation are lazy and disk-backed:
+- Thumbnail and metadata generation are lazy and queue-backed:
   - `/api/thumb` looks in `section.thumbPath` first, then tries alternate thumbnail formats, then generates new thumbnails with `sharp` or ffmpeg
-  - `/api/meta` prefers `meta.json` next to the thumbnails; if none exists, it reads the original file and enqueues a `ThumbQueue` job under `./queue`
-  - `test/queue-processor.mjs` is the companion script that drains `./queue` and persists metadata back to `meta.json`
+  - `/api/meta` prefers `meta.json` next to the thumbnails; if none exists, it reads the original file and enqueues a BullMQ job via `lib/thumb-queue.ts`
+  - `scripts/warmup-thumbnails.ts` and `scripts/enqueue-collection-scan.ts` scan collections and enqueue thumbnail jobs, while `scripts/media-worker.ts` processes the queue and persists thumbnails or `meta.json`
 
 ## Key conventions
 
@@ -39,5 +39,5 @@
 - Preserve current API payload shapes. The client code expects responses like `{ files }`, `{ dates }`, and metadata objects that expose `COMPUTED.Width` / `COMPUTED.Height`.
 - Photo grouping depends on `getFileDate()` in `lib/files.mjs`: it extracts `YYYYMMDD` from the filename before falling back to filesystem timestamps. Changing filename handling changes date buckets in the gallery.
 - `section.from` and `section.till` in `config.json` are applied after directory enumeration to clip the visible range of files inside a section.
-- `data/` and `queue/` are ignored working directories used for generated thumbnails and queued metadata. Code in `/api/thumb`, `/api/meta`, and `test/queue-processor.mjs` relies on those side effects.
+- `data/` remains an ignored working directory for generated thumbnails. Queue state now lives in Kvrocks/Redis via BullMQ rather than in the repository `queue/` directory.
 - The repository mixes `.js` and `.mjs`. Match the module format already used by the file you are editing instead of normalizing imports/exports as an unrelated cleanup.
