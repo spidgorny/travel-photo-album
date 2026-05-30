@@ -1,5 +1,5 @@
 import { Spinner } from "react-bootstrap";
 
 export function Loading() {
-  return <Spinner animation="border" />;
+	return <Spinner animation="border" />;
 }

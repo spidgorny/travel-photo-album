@@ -1,19 +1,27 @@
 import Head from "next/head";
 import Image from "next/image";
+import { useRouter } from "next/router";
+import type { GetServerSideProps } from "next";
+import { Container } from "react-bootstrap";
 import styles from "../styles/Home.module.css";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { Container } from "react-bootstrap";
 import config from "../lib/config.js";
-import { GalleryFor } from "../components/gallery.js";
-import { useRouter } from "next/router";
-import { SectionsNav } from "../components/nav/sections-nav";
+import { GalleryFor } from "../components/gallery";
 import { SectionFolders } from "../components/nav/section-folders";
+import { SectionsNav } from "../components/nav/sections-nav";
+import { firstQueryValue, type UISection } from "../components/ui-types";
 
-export default function Home({ sections = [] }) {
+interface HomeProps {
+	sections: UISection[];
+}
+
+export default function Home({ sections = [] }: HomeProps) {
 	const router = useRouter();
-	const sectionId = Number(router.query.section);
-	const section = sections[sectionId];
-	const { folder } = router.query;
+	const sectionQuery = firstQueryValue(router.query.section);
+	const sectionId = Number.parseInt(sectionQuery ?? "", 10);
+	const activeSectionId = Number.isInteger(sectionId) ? sectionId : -1;
+	const section = sections[activeSectionId];
+	const folder = firstQueryValue(router.query.folder) ?? "";
 
 	return (
 		<>
@@ -27,17 +35,11 @@ export default function Home({ sections = [] }) {
 				<Container fluid className="d-flex">
 					<div className="flex-grow-0" style={{ width: "25%" }}>
 						<h4>Travel Photo Album</h4>
-						<SectionsNav sections={sections} sectionId={sectionId} />
+						<SectionsNav sections={sections} sectionId={activeSectionId} />
 						<SectionFolders section={section} folder={folder} />
 					</div>
 					<div className="flex-grow-1" style={{ width: "75%" }}>
-						{section && (
-							<GalleryFor
-								sectionId={sectionId}
-								section={section}
-								folder={folder}
-							/>
-						)}
+						{section && <GalleryFor section={section} folder={folder} />}
 					</div>
 				</Container>
 
@@ -63,10 +65,12 @@ export default function Home({ sections = [] }) {
 	);
 }
 
-export function getServerSideProps() {
+export const getServerSideProps: GetServerSideProps<HomeProps> = async () => {
+	const sections = Array.isArray(config?.sections) ? config.sections : [];
+
 	return {
 		props: {
-			sections: config.sections.map((x, index) => ({ ...x, id: index })),
+			sections: sections.map((section, index) => ({ ...section, id: index })),
 		},
 	};
-}
+};

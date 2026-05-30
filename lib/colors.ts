@@ -263,4 +263,7 @@ export const colors = {
 		800: "#9f1239",
 		900: "#881337",
 	},
-};
+} as const;
+
+export type ColorName = keyof typeof colors;
+export type ColorShade<Name extends ColorName> = keyof (typeof colors)[Name];

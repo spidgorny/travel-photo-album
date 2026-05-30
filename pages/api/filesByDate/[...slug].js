@@ -1,36 +1,40 @@
 import invariant from "tiny-invariant";
-import { isValidDate } from "../../../lib/date.mjs";
 import { DateTime } from "luxon";
 import config from "../../../lib/config.js";
+import { isValidDate } from "../../../lib/date.mjs";
 import { getFileDates } from "../../../lib/files.mjs";
 
 export default async function handler(req, res) {
 	try {
-		let [sectionInput, ...filePath] = req.query.slug;
-		let date = filePath.pop(); // last part is a date
+		const slug = Array.isArray(req.query.slug)
+			? req.query.slug
+			: typeof req.query.slug === "string"
+				? [req.query.slug]
+				: [];
+		const [sectionInput, ...filePathWithDate] = slug;
+		const dateInput = filePathWithDate.pop();
 		const sectionId = Number(sectionInput ?? req.query.section);
-		const section = config.sections[sectionId];
-		invariant(section);
+		const section = config.sections?.[sectionId];
+		invariant(section, "section");
+		invariant(dateInput, "date missing");
 
-		date = new Date(date);
+		const date = new Date(dateInput);
 		invariant(isValidDate(date), "date missing");
 		const datePlus1 = new Date(date.getTime() + 1000 * 60 * 60 * 24);
-		console.log([date, datePlus1]);
 
-		let files = await getFileDates(section, filePath ?? []);
-		files = files.filter((x) => x.date > date && x.date < datePlus1);
+		let files = await getFileDates(section, filePathWithDate);
+		files = files.filter((file) => file.date > date && file.date < datePlus1);
+		files = files.filter((file) => !file.isDir);
 
-		files = files.filter((x) => !x.isDir);
-
-		// console.log({ files });
 		res.setHeader("Cache-Control", "public, s-maxage=6000");
 		res.setHeader("Expires", DateTime.now().plus({ days: 30 }).toHTTP());
 		res.status(200).json({ sectionId, section, files });
-	} catch (e) {
+	} catch (error) {
 		res.status(500).json({
 			status: "error",
-			message: e.message,
-			stack: e?.stack.split("\n"),
+			message: error instanceof Error ? error.message : String(error),
+			stack:
+				error instanceof Error && error.stack ? error.stack.split("\n") : undefined,
 		});
 	}
 }
