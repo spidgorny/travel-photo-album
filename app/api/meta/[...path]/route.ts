@@ -10,6 +10,7 @@ import {
 } from "../../../../lib/api-route";
 import { joinSectionPath } from "../../../../lib/files";
 import {
+	getStoredMetaDirectoryKeys,
 	buildBasicFileMetaData,
 	buildImageMetaData,
 	normalizeStoredDescription,
@@ -82,17 +83,24 @@ export async function GET(_request: Request, { params }: RouteContext) {
 		const section = getSectionById(config.sections, sectionId);
 		invariant(section, "section");
 		const numericSectionId = Number(sectionId);
+		const metaSearchKeys = getStoredMetaDirectoryKeys(section, filePath);
 
 		let metaData: MetaData | null = await getMetaByJson(section, filePath);
 		if (!metaData) {
 			metaData = await getMetaByFile(numericSectionId, section, filePath);
 		}
 
-		return NextResponse.json(metaData, {
+		return NextResponse.json(
+			{
+				...metaData,
+				metaSearchKeys,
+			},
+			{
 			headers: {
 				"Cache-Control": "s-maxage=86400, public",
 			},
-		});
+			},
+		);
 	} catch (error) {
 		const err = toError(error);
 		if (err.message === "MP4 preview") {
@@ -103,6 +111,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 					Width: 3,
 					Height: 2,
 				},
+				metaSearchKeys: [],
 			});
 		}
 

@@ -74,6 +74,7 @@ export interface MetaResponse {
 		height?: number;
 	};
 	description?: string | null;
+	metaSearchKeys?: string[];
 	[key: string]: unknown;
 }
 

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../../lib/http";
 import type { FilesApiEntry, FilesResponse, UISection } from "../ui-types";
+import { buildApiPath, buildHomeHref } from "../url-paths";
 
 const folderNameCollator = new Intl.Collator(undefined, {
 	numeric: true,
@@ -72,7 +73,7 @@ interface SubFoldersProps {
 }
 
 export function SubFolders({ section, activeFolder, thePath }: SubFoldersProps) {
-	const { data } = useSWR<FilesResponse>(`/api/files/${section.id}/${thePath}`, fetcher);
+	const { data } = useSWR<FilesResponse>(buildApiPath("/api/files", section.id, thePath), fetcher);
 	const files = Array.isArray(data?.files) ? data.files : [];
 	const dirs = files
 		.filter((file): file is FilesApiEntry => Boolean(file?.isDir))
@@ -161,7 +162,7 @@ function FolderNode({
 					</span>
 				</button>
 				<Link
-					href={`/?section=${section.id}&folder=${folderPath}`}
+					href={buildHomeHref(section.id, folderPath)}
 					className="min-w-0 flex-1 rounded-xl px-2 py-1"
 				>
 					<div className="truncate text-sm font-medium text-white">

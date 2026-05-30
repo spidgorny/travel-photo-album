@@ -12,7 +12,8 @@ import { createPortal } from "react-dom";
 import Gallery from "react-photo-gallery";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
-import type { FilesResponse, GalleryPhoto } from "./ui-types";
+import type { FilesResponse, GalleryPhoto, MetaResponse } from "./ui-types";
+import { buildApiPath } from "./url-paths";
 import { Loading } from "./widget/loading";
 
 interface GalleryOneDayProps {
@@ -50,10 +51,10 @@ type PhotoGalleryComponentProps = {
 const PhotoGallery = Gallery as unknown as ComponentType<PhotoGalleryComponentProps>;
 
 export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: GalleryOneDayProps) {
-	const apiUrl = `/api/filesByDate/${sectionId}/${folder}/${date}${
+	const apiUrl = `${buildApiPath("/api/filesByDate", sectionId, folder, date)}${
 		searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ""
 	}`;
-	const { data, mutate } = useSWR<FilesResponse>(apiUrl, fetcher);
+	const { data } = useSWR<FilesResponse>(apiUrl, fetcher);
 
 	const [currentImage, setCurrentImage] = useState(0);
 	const [viewerIsOpen, setViewerIsOpen] = useState(false);
@@ -76,8 +77,8 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 
 		return files.map((file) => {
 			const filePath = typeof file.path === "string" ? file.path : "";
-			const src = `/api/photo/${sectionId}/${folder}/${filePath}`;
-			const thumbSrc = `/api/thumb/${sectionId}/${folder}/${filePath}`;
+			const src = buildApiPath("/api/photo", sectionId, folder, filePath);
+			const thumbSrc = buildApiPath("/api/thumb", sectionId, folder, filePath);
 			const photoKey = `${sectionId}:${folder}:${filePath}`;
 			const fileName = filePath.split("/").at(-1) ?? filePath;
 
@@ -108,6 +109,12 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 
 	const [dimensions, setDimensions] = useState<GalleryPhoto[]>(photos);
 	const lastWheelNavigationAt = useRef(0);
+
+	const updatePhotoDescription = useCallback((photoKey: string, description?: string) => {
+		setDimensions((items) =>
+			items.map((item) => (item.key === photoKey ? { ...item, description } : item)),
+		);
+	}, []);
 
 	const showPreviousImage = useCallback(() => {
 		setCurrentImage((index) => (index > 0 ? index - 1 : index));
@@ -173,6 +180,22 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 	}, [closeLightbox, showNextImage, showPreviousImage, viewerIsOpen]);
 
 	const currentPhoto = dimensions[currentImage] ?? null;
+	const currentMetaUrl =
+		viewerIsOpen && currentPhoto
+			? buildApiPath("/api/meta", sectionId, folder, currentPhoto.path)
+			: null;
+	const { data: currentMeta } = useSWR<MetaResponse>(currentMetaUrl, fetcher, {
+		revalidateOnFocus: false,
+	});
+	const currentMetaDescription =
+		typeof currentMeta?.description === "string" ? currentMeta.description : undefined;
+
+	useEffect(() => {
+		if (!currentPhoto || currentMetaDescription === currentPhoto.description) {
+			return;
+		}
+		updatePhotoDescription(currentPhoto.key, currentMetaDescription);
+	}, [currentMetaDescription, currentPhoto, updatePhotoDescription]);
 
 	const imageRenderer = (props: ImageRendererProps) => {
 		const { index, left, top, key, photo } = props;
@@ -281,12 +304,7 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 										folder={folder}
 										photo={currentPhoto}
 										onSaved={(description) => {
-											setDimensions((items) =>
-												items.map((item) =>
-													item.key === currentPhoto.key ? { ...item, description } : item,
-												),
-											);
-											void mutate();
+											updatePhotoDescription(currentPhoto.key, description);
 										}}
 									/>
 								</div>
@@ -318,7 +336,7 @@ function DescriptionEditor({ sectionId, folder, photo, onSaved }: DescriptionEdi
 	const saveDescription = useCallback(async () => {
 		setSaveState("saving");
 		try {
-			const response = await fetch(`/api/meta/${sectionId}/${folder}/${photo.path}`, {
+			const response = await fetch(buildApiPath("/api/meta", sectionId, folder, photo.path), {
 				method: "PATCH",
 				headers: {
 					"Content-Type": "application/json",

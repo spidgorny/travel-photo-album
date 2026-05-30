@@ -45,13 +45,78 @@ export function getStoredMetaDirectoryKey(
 		return getMetaFilePath(section, filePath);
 	}
 
+	return getStoredMetaDirectoryKeys(section, filePath)[0];
+}
+
+export function getStoredMetaDirectoryKeys(
+	section: ConfigSection,
+	filePath: string[],
+): string[] {
+	if (section.thumbPath) {
+		return [getMetaFilePath(section, filePath)];
+	}
+
 	const directoryPath = path.posix.dirname(filePath.join("/"));
-	const sectionKey = section.path ?? section.name ?? "section";
+	return getSectionKeyAliases(section).map((sectionKey) =>
+		buildStoredMetaDirectoryKey(sectionKey, directoryPath),
+	);
+}
+
+function buildStoredMetaDirectoryKey(sectionKey: string, directoryPath: string) {
 	const hash = crypto
 		.createHash("sha1")
 		.update(JSON.stringify({ sectionKey, directoryPath }))
 		.digest("hex");
 	return `${thumbKvPrefix}:directory-meta:${hash}`;
+}
+
+function getSectionKeyAliases(section: ConfigSection): string[] {
+	const aliases = new Set<string>();
+	const hostRoot = process.env.MEDIA_ROOT_HOST_PATH?.trim() || "/Volumes/photo";
+	const containerRoot =
+		process.env.MEDIA_ROOT_CONTAINER_PATH?.trim() || "/media/nas/photo";
+
+	for (const candidate of [
+		section.path,
+		section.macPath,
+		section.linuxPath,
+		section.winPath,
+		section.pathWindows,
+		section.name,
+	]) {
+		if (typeof candidate !== "string" || candidate.trim().length === 0) {
+			continue;
+		}
+		const normalizedCandidate = candidate.trim();
+		aliases.add(normalizedCandidate);
+		const hostToContainer = remapSectionKey(normalizedCandidate, hostRoot, containerRoot);
+		if (hostToContainer) {
+			aliases.add(hostToContainer);
+		}
+		const containerToHost = remapSectionKey(normalizedCandidate, containerRoot, hostRoot);
+		if (containerToHost) {
+			aliases.add(containerToHost);
+		}
+	}
+
+	if (aliases.size === 0) {
+		aliases.add("section");
+	}
+
+	return [...aliases];
+}
+
+function remapSectionKey(sectionKey: string, fromRoot: string, toRoot: string) {
+	if (!sectionKey || !fromRoot || !toRoot) {
+		return null;
+	}
+	if (sectionKey === fromRoot) {
+		return toRoot;
+	}
+	if (sectionKey.startsWith(`${fromRoot}/`)) {
+		return `${toRoot}${sectionKey.slice(fromRoot.length)}`;
+	}
+	return null;
 }
 
 export async function readStoredMetaDirectory(
@@ -67,16 +132,19 @@ export async function readStoredMetaDirectory(
 		return {};
 	}
 
-	const raw = await client.get(getStoredMetaDirectoryKey(section, filePath));
-	if (!raw) {
-		return {};
+	for (const key of getStoredMetaDirectoryKeys(section, filePath)) {
+		const raw = await client.get(key);
+		if (!raw) {
+			continue;
+		}
+		try {
+			return JSON.parse(raw) as DirectoryMetaData;
+		} catch {
+			return {};
+		}
 	}
 
-	try {
-		return JSON.parse(raw) as DirectoryMetaData;
-	} catch {
-		return {};
-	}
+	return {};
 }
 
 export async function readStoredMetaForFile(
@@ -105,9 +173,11 @@ export async function writeStoredMetaForFile(
 
 	const client = await getThumbKvClient();
 	invariant(client, "thumb KV is required to store metadata for sections without thumbPath");
-	const metaKey = getStoredMetaDirectoryKey(section, filePath);
-	await client.set(metaKey, JSON.stringify(metaData));
-	return { metaFile: metaKey, baseName };
+	const metaKeys = getStoredMetaDirectoryKeys(section, filePath);
+	for (const metaKey of metaKeys) {
+		await client.set(metaKey, JSON.stringify(metaData));
+	}
+	return { metaFile: metaKeys[0], baseName };
 }
 
 export function normalizeStoredDescription(value: unknown): string | undefined {
