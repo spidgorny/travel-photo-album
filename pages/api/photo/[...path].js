@@ -1,4 +1,4 @@
-import config from "../../../config.json";
+import config from "../../../lib/config.js";
 import fs from "fs";
 import mime from "mime-types";
 import { joinSectionPath } from "../../../lib/files.mjs";

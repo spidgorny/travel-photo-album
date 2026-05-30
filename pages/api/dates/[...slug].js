@@ -1,4 +1,4 @@
-import config from "../../../config.json";
+import config from "../../../lib/config.js";
 import { getFileDates } from "../../../lib/files.mjs";
 import { DateTime } from "luxon";
 

@@ -1,7 +1,7 @@
 import invariant from "tiny-invariant";
 import { isValidDate } from "../../../lib/date.mjs";
 import { DateTime } from "luxon";
-import config from "../../../config.json";
+import config from "../../../lib/config.js";
 import { getFileDates } from "../../../lib/files.mjs";
 
 export default async function handler(req, res) {

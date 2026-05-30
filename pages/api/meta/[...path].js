@@ -2,7 +2,7 @@ import fs from "fs";
 import mime from "mime-types";
 import sizeOf from "image-size";
 import { promisify } from "util";
-import config from "../../../config.json";
+import config from "../../../lib/config.js";
 import { joinSectionPath } from "../../../lib/files.mjs";
 import path from "path";
 import { ThumbQueue } from "../../../lib/thumb-queue.mjs";

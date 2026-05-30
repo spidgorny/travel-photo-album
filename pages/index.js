@@ -3,7 +3,7 @@ import Image from "next/image";
 import styles from "../styles/Home.module.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Container } from "react-bootstrap";
-import config from "../config.json";
+import config from "../lib/config.js";
 import { GalleryFor } from "../components/gallery.js";
 import { useRouter } from "next/router";
 import { SectionsNav } from "../components/nav/sections-nav";
@@ -12,6 +12,7 @@ import { SectionFolders } from "../components/nav/section-folders";
 export default function Home({ sections }) {
 	const router = useRouter();
 	const sectionId = Number(router.query.section);
+	const section = sections[sectionId];
 	const { folder } = router.query;
 
 	return (
@@ -27,13 +28,13 @@ export default function Home({ sections }) {
 					<div className="flex-grow-0" style={{ width: "25%" }}>
 						<h4>Travel Photo Album</h4>
 						<SectionsNav sections={sections} sectionId={sectionId} />
-						<SectionFolders section={sections[sectionId]} />
+						<SectionFolders section={section} />
 					</div>
 					<div className="flex-grow-1" style={{ width: "75%" }}>
-						{sectionId >= 0 && (
+						{section && (
 							<GalleryFor
 								sectionId={sectionId}
-								section={sections[sectionId]}
+								section={section}
 								folder={folder}
 							/>
 						)}

@@ -5,6 +5,10 @@ import { useRouter } from "next/router.js";
 import path from "path";
 
 export function SectionFolders({ section }) {
+	if (!section) {
+		return null;
+	}
+
 	return (
 		<>
 			<div>Folders</div>
@@ -19,6 +23,7 @@ export function SubFolders({ section, thePath }) {
 
 	const router = useRouter();
 	const { folder } = router.query;
+	const activeFolder = typeof folder === "string" ? folder : "";
 
 	if (!dirs.length) {
 		return null;
@@ -28,7 +33,7 @@ export function SubFolders({ section, thePath }) {
 		<ul>
 			{dirs.map((x) => {
 				let pathJoined = path.join(thePath, x.path);
-				const isActive = folder.includes(pathJoined);
+				const isActive = activeFolder.includes(pathJoined);
 				return (
 					<li key={x.path} className={isActive ? "active" : ""}>
 						<Link href={`/?section=${section.id}&folder=${pathJoined}`} key={x.path} className={isActive ? "active" +

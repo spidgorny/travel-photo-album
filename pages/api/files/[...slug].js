@@ -1,4 +1,4 @@
-import config from "../../../config.json";
+import config from "../../../lib/config.js";
 import invariant from "tiny-invariant";
 import { DateTime } from "luxon";
 import { getFilteredFiles } from "../../../lib/files.mjs";
