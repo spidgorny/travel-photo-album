@@ -2,7 +2,6 @@ import axios from "axios";
 import type { CSSProperties, ComponentType, MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import Carousel, { Modal, ModalGateway } from "react-images";
 import Gallery from "react-photo-gallery";
 import { fetcher } from "../lib/http";
 import { Loading } from "./widget/loading";
@@ -37,7 +36,6 @@ type PhotoGalleryComponentProps = {
 };
 
 const PhotoGallery = Gallery as unknown as ComponentType<PhotoGalleryComponentProps>;
-const SafeModalGateway = ModalGateway as unknown as ComponentType<{ children?: ReactNode }>;
 
 export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 	const apiUrl = `/api/filesByDate/${sectionId}/${folder}/${date}`;
@@ -85,6 +83,14 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 	}, [data, folder, sectionId]);
 
 	const [dimensions, setDimensions] = useState<GalleryPhoto[]>(photos);
+
+	const showPreviousImage = useCallback(() => {
+		setCurrentImage((index) => (index > 0 ? index - 1 : index));
+	}, []);
+
+	const showNextImage = useCallback(() => {
+		setCurrentImage((index) => (index < dimensions.length - 1 ? index + 1 : index));
+	}, [dimensions.length]);
 
 	useEffect(() => {
 		setDimensions(photos);
@@ -134,6 +140,35 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 		};
 	}, [date, photos, sectionId]);
 
+	useEffect(() => {
+		if (!viewerIsOpen) {
+			return;
+		}
+
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				closeLightbox();
+				return;
+			}
+
+			if (event.key === "ArrowLeft") {
+				showPreviousImage();
+				return;
+			}
+
+			if (event.key === "ArrowRight") {
+				showNextImage();
+			}
+		};
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown);
+		};
+	}, [closeLightbox, showNextImage, showPreviousImage, viewerIsOpen]);
+
+	const currentPhoto = dimensions[currentImage] ?? null;
+
 	const imageRenderer = (props: ImageRendererProps) => {
 		const { index, left, top, key, photo } = props;
 
@@ -172,16 +207,66 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 					renderImage={imageRenderer}
 				/>
 			)}
-			<SafeModalGateway>
-				{viewerIsOpen ? (
-					<Modal onClose={closeLightbox}>
-						<Carousel
-							currentIndex={currentImage}
-							views={dimensions.map((photo) => ({ ...photo }))}
-						/>
-					</Modal>
-				) : null}
-			</SafeModalGateway>
+			{viewerIsOpen && currentPhoto ? (
+				<div
+					className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm"
+					onClick={closeLightbox}
+					role="presentation"
+				>
+					<div
+						className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 shadow-2xl shadow-black/50"
+						onClick={(event) => event.stopPropagation()}
+						role="dialog"
+						aria-modal="true"
+						aria-label={currentPhoto.caption ?? "Photo viewer"}
+					>
+						<div className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5">
+							<div className="min-w-0">
+								<div className="truncate text-sm font-medium text-white">
+									{currentPhoto.caption ?? "Photo"}
+								</div>
+								<div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">
+									{currentImage + 1} / {dimensions.length}
+								</div>
+							</div>
+							<button
+								type="button"
+								onClick={closeLightbox}
+								className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
+							>
+								Close
+							</button>
+						</div>
+						<div className="relative flex min-h-[60vh] items-center justify-center bg-slate-950/80 p-4 sm:p-6">
+							{currentImage > 0 ? (
+								<button
+									type="button"
+									onClick={showPreviousImage}
+									className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white transition hover:border-sky-300/40 hover:bg-slate-900"
+									aria-label="Previous image"
+								>
+									Prev
+								</button>
+							) : null}
+							<img
+								src={currentPhoto.source.regular}
+								alt={currentPhoto.title ?? currentPhoto.caption}
+								className="max-h-[78vh] w-auto max-w-full rounded-2xl object-contain"
+							/>
+							{currentImage < dimensions.length - 1 ? (
+								<button
+									type="button"
+									onClick={showNextImage}
+									className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white transition hover:border-sky-300/40 hover:bg-slate-900"
+									aria-label="Next image"
+								>
+									Next
+								</button>
+							) : null}
+						</div>
+					</div>
+				</div>
+			) : null}
 		</div>
 	);
 }

@@ -52,7 +52,7 @@ export default function Home({ sections = [] }: HomeProps) {
 				<main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-5 px-4 py-5 lg:px-6 xl:px-8">
 					<header className="rounded-[1.75rem] border border-white/10 bg-white/5 px-5 py-4 shadow-2xl shadow-sky-950/20 backdrop-blur-xl">
 						<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-							<div className="max-w-2xl space-y-2">
+							<div className="max-w-xl space-y-2">
 								<div className="inline-flex items-center rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-sky-200">
 									Travel Photo Album
 								</div>
@@ -63,8 +63,8 @@ export default function Home({ sections = [] }: HomeProps) {
 									Switch trips from the header, expand the folder tree, and scan each day side by side with the gallery.
 								</p>
 							</div>
-							<div className="grid gap-3 md:grid-cols-[minmax(260px,320px),minmax(220px,1fr)]">
-								<label className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3">
+							<div className="flex min-w-0 flex-col gap-3 lg:w-[44rem] lg:flex-row lg:items-center">
+								<label className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-[19rem] lg:shrink-0">
 									<div className="text-xs uppercase tracking-[0.2em] text-slate-400">
 										Travel collection
 									</div>
@@ -81,11 +81,11 @@ export default function Home({ sections = [] }: HomeProps) {
 										))}
 									</select>
 								</label>
-								<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3">
+								<div className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:flex-1">
 									<div className="text-xs uppercase tracking-[0.2em] text-slate-400">
 										Current path
 									</div>
-									<div className="mt-2 truncate text-sm font-medium text-slate-200 sm:text-base">
+									<div className="mt-2 truncate text-sm font-medium text-slate-200">
 										{locationLabel}
 									</div>
 								</div>
