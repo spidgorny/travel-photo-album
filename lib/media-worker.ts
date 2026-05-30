@@ -145,7 +145,7 @@ if (getMediaKind(filePath) !== "image") {
 }
 return {
 	action: mediaJobNames.getMetaForFile,
-	...writeStoredMetaForFile(section, filePath, payload?.metaData ?? {}),
+	...(await writeStoredMetaForFile(section, filePath, payload?.metaData ?? {})),
 };
 }
 
@@ -159,7 +159,7 @@ invariant(videoStream, "video stream not found");
 const COMPUTED = { Width: videoStream.width, Height: videoStream.height };
 return {
 action: mediaJobNames.storeMetaForVideo,
-...writeStoredMetaForFile(section, filePath, { ...payload.data, COMPUTED }),
+...(await writeStoredMetaForFile(section, filePath, { ...payload.data, COMPUTED })),
 };
 }
 
@@ -187,7 +187,7 @@ getEnsureSectionThumbVariant(payload),
 );
 if (mediaKind === "image" && !isVideoPath(filePath)) {
 const metaData = await buildImageMetaData(section, filePath);
-writeStoredMetaForFile(section, filePath, metaData);
+await writeStoredMetaForFile(section, filePath, metaData);
 }
 return {
 action: mediaJobNames.warmSectionFile,

@@ -7,7 +7,10 @@ import {
 	getSectionById,
 	jsonError,
 } from "../../../../lib/api-route";
-import { getMetaFilePath, readDirectoryMetaFile } from "../../../../lib/file-meta";
+import {
+	getStoredMetaDirectoryKey,
+	readStoredMetaDirectory,
+} from "../../../../lib/file-meta";
 import type {
 	DailyLocationSummary,
 	DatedFileEntry,
@@ -40,7 +43,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 		let files = (await getFileDates(section, filePath)) as DatedFileEntry[];
 
 		files = files.filter((file) => !file.isDir);
-		const locationsByDate = getDateLocationSummaries(section, files);
+		const locationsByDate = await getDateLocationSummaries(section, files);
 		const dates = {} as Record<string, { count: number; locations: string[] }>;
 		for (const file of files) {
 			const dateKey = file.date.toISOString().substring(0, 10);
@@ -80,10 +83,10 @@ export async function GET(request: Request, { params }: RouteContext) {
 	}
 }
 
-function getDateLocationSummaries(
+async function getDateLocationSummaries(
 	section: (typeof config.sections)[number],
 	files: DatedFileEntry[],
-): Record<string, DailyLocationSummary[]> {
+): Promise<Record<string, DailyLocationSummary[]>> {
 	const metaCache = new Map<string, Record<string, StoredDirectoryMetaEntry>>();
 	const locationCountsByDate = new Map<
 		string,
@@ -94,8 +97,9 @@ function getDateLocationSummaries(
 		const filePath = String(file.dirPath ?? file.path)
 			.split("/")
 			.filter(Boolean);
-		const metaFile = getMetaFilePath(section, filePath);
-		const metaData = metaCache.get(metaFile) ?? readDirectoryMetaFile(metaFile);
+		const metaFile = getStoredMetaDirectoryKey(section, filePath);
+		const metaData =
+			metaCache.get(metaFile) ?? (await readStoredMetaDirectory(section, filePath));
 		metaCache.set(metaFile, metaData);
 
 		const fileMeta = metaData[pathBaseName(filePath)];

@@ -16,6 +16,7 @@ import {
 } from "../../../../lib/file-meta";
 import type { StoredDirectoryMetaEntry } from "../../../../lib/files-types";
 import {
+	serializeSectionForWorker,
 	thumbJobActions,
 	type ThumbImageMetaData,
 } from "../../../../lib/thumb-jobs";
@@ -117,9 +118,6 @@ async function getMetaByJson(
 	section: ConfigSection,
 	filePath: string[],
 ): Promise<JsonMetaData | null> {
-	if (!section.thumbPath) {
-		return readMetaFromStorage(section, filePath);
-	}
 	return readMetaFromStorage(section, filePath);
 }
 
@@ -141,6 +139,7 @@ async function getMetaByFile(
 	await queue.enqueue({
 		action: thumbJobActions.getMetaForFile,
 		sectionId,
+		section: serializeSectionForWorker(section),
 		filePath,
 		metaData,
 	});
@@ -148,11 +147,11 @@ async function getMetaByFile(
 	return metaData as FileMetaData;
 }
 
-function readMetaFromStorage(
+async function readMetaFromStorage(
 	section: ConfigSection,
 	filePath: string[],
-): JsonMetaData | null {
-	const fileMeta = readStoredMetaForFile(section, filePath);
+): Promise<JsonMetaData | null> {
+	const fileMeta = await readStoredMetaForFile(section, filePath);
 	if (!fileMeta?.COMPUTED?.Width || !fileMeta?.COMPUTED?.Height) {
 		return null;
 	}
@@ -181,6 +180,7 @@ async function getVideoMeta(
 			await queue.enqueue({
 				action: thumbJobActions.storeMetaForVideo,
 				sectionId,
+				section: serializeSectionForWorker(section),
 				filePath,
 				data,
 			});

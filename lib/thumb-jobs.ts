@@ -1,4 +1,5 @@
 import type { FfprobeData } from "fluent-ffmpeg";
+import type { ConfigSection } from "./config.ts";
 import type { StoredDirectoryMetaEntry } from "./files-types.ts";
 
 export const thumbQueueUrl =
@@ -30,6 +31,7 @@ export interface ThumbImageMetaData extends StoredDirectoryMetaEntry {
 export interface GetMetaForFileJob {
 	action: typeof thumbJobActions.getMetaForFile;
 	sectionId: number;
+	section?: ConfigSection;
 	filePath: string[];
 	metaData: ThumbImageMetaData;
 }
@@ -37,6 +39,7 @@ export interface GetMetaForFileJob {
 export interface StoreMetaForVideoJob {
 	action: typeof thumbJobActions.storeMetaForVideo;
 	sectionId: number;
+	section?: ConfigSection;
 	filePath: string[];
 	data: FfprobeData;
 }
@@ -44,6 +47,7 @@ export interface StoreMetaForVideoJob {
 export interface WarmSectionFileJob {
 	action: typeof thumbJobActions.warmSectionFile;
 	sectionId: number;
+	section?: ConfigSection;
 	filePath: string[];
 	variant?: string;
 }
@@ -52,4 +56,30 @@ export type ThumbJobData = GetMetaForFileJob | StoreMetaForVideoJob | WarmSectio
 
 export function isThumbQueueConfigured() {
 	return thumbQueueUrl.length > 0;
+}
+
+export function serializeSectionForWorker(section: ConfigSection): ConfigSection {
+	return {
+		...section,
+		path: remapSectionPathForWorker(section.path),
+	};
+}
+
+function remapSectionPathForWorker(sectionPath?: string) {
+	if (!sectionPath) {
+		return sectionPath;
+	}
+
+	const hostRoot = process.env.MEDIA_ROOT_HOST_PATH?.trim() || "/Volumes/photo";
+	const containerRoot =
+		process.env.MEDIA_ROOT_CONTAINER_PATH?.trim() || "/media/nas/photo";
+
+	if (
+		sectionPath === hostRoot ||
+		sectionPath.startsWith(`${hostRoot}/`)
+	) {
+		return `${containerRoot}${sectionPath.slice(hostRoot.length)}`;
+	}
+
+	return sectionPath;
 }

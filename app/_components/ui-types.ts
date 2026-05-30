@@ -123,6 +123,7 @@ export interface GalleryPhoto extends FilesApiEntry {
 	src: string;
 	source: {
 		regular: string;
+		fullscreen?: string;
 		thumbnail: string;
 	};
 	width: number;

@@ -18,6 +18,8 @@ interface RouteContext {
 
 export async function GET(_request: Request, { params }: RouteContext) {
 	try {
+		const requestUrl = new URL(_request.url);
+		const variant = requestUrl.searchParams.get("variant") || undefined;
 		const { path: pathSegments = [] } = await params;
 		const [sectionId, ...filePath] = pathSegments;
 		const section = getSectionById(config.sections, sectionId);
@@ -29,7 +31,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
 			});
 		}
 
-		const thumb = await ensureSectionThumb(Number(sectionId), section, filePath);
+		const thumb = await ensureSectionThumb(
+			Number(sectionId),
+			section,
+			filePath,
+			variant,
+		);
 		const stream =
 			"buffer" in thumb
 				? Readable.from(thumb.buffer)

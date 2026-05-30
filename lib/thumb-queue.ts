@@ -69,6 +69,30 @@ export async function closeThumbQueue() {
 	}
 }
 
+export async function validateBullMqConnection(
+	queue: Queue,
+	queueLabel = thumbQueueName,
+) {
+	try {
+		await queue.waitUntilReady();
+		await queue.getJobCounts("waiting");
+		return queue;
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(`BullMQ connection failed for ${queueLabel}: ${message}`);
+	}
+}
+
+export async function validateThumbQueueConnection() {
+	const queue = await getThumbQueue();
+	if (!queue) {
+		throw new Error(
+			"BullMQ queue is not configured; set THUMB_QUEUE_URL or BULLMQ_REDIS_URL",
+		);
+	}
+	return validateBullMqConnection(queue, thumbQueueName);
+}
+
 export class ThumbQueue {
 	async enqueue(data: ThumbJobData, options: JobsOptions = {}) {
 		const queue = await getThumbQueue();

@@ -13,6 +13,8 @@ createMediaQueue,
 getEnsureSectionThumbVariant,
 mediaJobNames,
 } from "../lib/media-worker.ts";
+import { serializeSectionForWorker } from "../lib/thumb-jobs.ts";
+import { validateBullMqConnection } from "../lib/thumb-queue.ts";
 import { closeThumbKvClient, isVideoPath } from "../lib/thumb-store.ts";
 
 const batchSize = 250;
@@ -31,10 +33,13 @@ invariant(section, "section not found");
 invariant(section.path, "section.path");
 console.log(`Resolved collection ${sectionId}: ${section.name}`);
 console.log(`Root path: ${section.path}`);
+const queue = createMediaQueue();
+console.log("Validating BullMQ connection...");
+await validateBullMqConnection(queue, mediaJobNames.warmSectionFile);
+console.log("BullMQ connection OK.");
 console.log("Scanning folders recursively...");
 
 const scanStats = { directories: 0, files: 0 };
-const queue = createMediaQueue();
 let enqueued = 0;
 let skipped = 0;
 const batchEntries = [];
@@ -49,6 +54,7 @@ return;
 }
 const payload = {
 sectionId,
+section: serializeSectionForWorker(section),
 filePath,
 variant: getEnsureSectionThumbVariant({}),
 };

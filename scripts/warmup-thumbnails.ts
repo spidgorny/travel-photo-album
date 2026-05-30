@@ -7,8 +7,15 @@ import invariant from "tiny-invariant";
 import config from "../lib/config.ts";
 import { closeRedisClient } from "../lib/cache.ts";
 import { joinSectionPath } from "../lib/files.ts";
-import { thumbJobActions } from "../lib/thumb-jobs.ts";
-import { closeThumbQueue, ThumbQueue } from "../lib/thumb-queue.ts";
+import {
+	serializeSectionForWorker,
+	thumbJobActions,
+} from "../lib/thumb-jobs.ts";
+import {
+	closeThumbQueue,
+	ThumbQueue,
+	validateThumbQueueConnection,
+} from "../lib/thumb-queue.ts";
 import {
 	closeThumbKvClient,
 	isVideoPath,
@@ -34,6 +41,9 @@ async function main() {
 	} else {
 		console.log("Thumbnail path: generated from source files / KV store");
 	}
+	console.log("Validating BullMQ connection...");
+	await validateThumbQueueConnection();
+	console.log("BullMQ connection OK.");
 	console.log("Scanning folders recursively...");
 	const scanStats = { directories: 0, files: 0 };
 	let enqueued = 0;
@@ -57,6 +67,7 @@ async function main() {
 			const job = await queue.enqueue({
 				action: thumbJobActions.warmSectionFile,
 				sectionId,
+				section: serializeSectionForWorker(section),
 				filePath,
 			});
 			if (!job) {

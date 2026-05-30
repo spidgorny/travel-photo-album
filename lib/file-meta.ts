@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import exifr from "exifr";
@@ -7,6 +8,7 @@ import { getNearestCity } from "offline-geocode-city";
 import invariant from "tiny-invariant";
 import type { ConfigSection } from "./config.ts";
 import { joinSectionPath } from "./files.ts";
+import { getThumbKvClient, thumbKvPrefix } from "./thumb-store.ts";
 import type {
 	FileGpsCoordinates,
 	FileLocationLabel,
@@ -20,7 +22,7 @@ const fallbackDimensions = { width: 3, height: 2 };
 const locationCache = new Map<string, FileLocationLabel | null>();
 
 export function getMetaFilePath(section: ConfigSection, filePath: string[]): string {
-	const metaRoot = section.thumbPath ?? section.path;
+	const metaRoot = section.thumbPath;
 	invariant(metaRoot, "section.path");
 	const metaDir = path.dirname(joinSectionPath(metaRoot, filePath));
 	return path.join(metaDir, "meta.json");
@@ -34,26 +36,77 @@ export function readDirectoryMetaFile(metaFile: string): DirectoryMetaData {
 	}
 }
 
-export function readStoredMetaForFile(
+export function getStoredMetaDirectoryKey(
 	section: ConfigSection,
 	filePath: string[],
-): StoredDirectoryMetaEntry | null {
-	const metaData = readDirectoryMetaFile(getMetaFilePath(section, filePath));
+): string {
+	if (section.thumbPath) {
+		return getMetaFilePath(section, filePath);
+	}
+
+	const directoryPath = path.posix.dirname(filePath.join("/"));
+	const sectionKey = section.path ?? section.name ?? "section";
+	const hash = crypto
+		.createHash("sha1")
+		.update(JSON.stringify({ sectionKey, directoryPath }))
+		.digest("hex");
+	return `${thumbKvPrefix}:directory-meta:${hash}`;
+}
+
+export async function readStoredMetaDirectory(
+	section: ConfigSection,
+	filePath: string[],
+): Promise<DirectoryMetaData> {
+	if (section.thumbPath) {
+		return readDirectoryMetaFile(getMetaFilePath(section, filePath));
+	}
+
+	const client = await getThumbKvClient();
+	if (!client) {
+		return {};
+	}
+
+	const raw = await client.get(getStoredMetaDirectoryKey(section, filePath));
+	if (!raw) {
+		return {};
+	}
+
+	try {
+		return JSON.parse(raw) as DirectoryMetaData;
+	} catch {
+		return {};
+	}
+}
+
+export async function readStoredMetaForFile(
+	section: ConfigSection,
+	filePath: string[],
+): Promise<StoredDirectoryMetaEntry | null> {
+	const metaData = await readStoredMetaDirectory(section, filePath);
 	return metaData[path.basename(filePath.join("/"))] ?? null;
 }
 
-export function writeStoredMetaForFile(
+export async function writeStoredMetaForFile(
 	section: ConfigSection,
 	filePath: string[],
 	metaEntry: StoredDirectoryMetaEntry,
 ) {
-	const metaFile = getMetaFilePath(section, filePath);
-	const metaData = readDirectoryMetaFile(metaFile);
+	const metaData = await readStoredMetaDirectory(section, filePath);
 	const baseName = path.basename(filePath.join("/"));
 	metaData[baseName] = metaEntry;
-	fs.mkdirSync(path.dirname(metaFile), { recursive: true });
-	fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2));
-	return { metaFile, baseName };
+
+	if (section.thumbPath) {
+		const metaFile = getMetaFilePath(section, filePath);
+		fs.mkdirSync(path.dirname(metaFile), { recursive: true });
+		fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2));
+		return { metaFile, baseName };
+	}
+
+	const client = await getThumbKvClient();
+	invariant(client, "thumb KV is required to store metadata for sections without thumbPath");
+	const metaKey = getStoredMetaDirectoryKey(section, filePath);
+	await client.set(metaKey, JSON.stringify(metaData));
+	return { metaFile: metaKey, baseName };
 }
 
 export async function buildImageMetaData(
