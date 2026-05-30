@@ -40,51 +40,80 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 	}
 
 	return (
-		<div className="space-y-6">
-			<div className="flex flex-col gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-end sm:justify-between">
-				<div>
-					<h2 className="text-2xl font-semibold text-white">Photo timeline</h2>
-					<p className="text-sm text-slate-400">
-						Photos are grouped by capture day for quick scanning.
-					</p>
+		<div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_7rem]">
+			<div className="space-y-6">
+				<div className="flex flex-col gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-end sm:justify-between">
+					<div>
+						<h2 className="text-2xl font-semibold text-white">Photo timeline</h2>
+						<p className="text-sm text-slate-400">
+							Photos are grouped by capture day for quick scanning.
+						</p>
+					</div>
+					<div className="text-sm text-slate-400">
+						{dates.length} day{dates.length === 1 ? "" : "s"}
+					</div>
 				</div>
-				<div className="text-sm text-slate-400">
-					{dates.length} day{dates.length === 1 ? "" : "s"}
-				</div>
-			</div>
-			{dates.map(({ date, count, locations }) => (
-				<section
-					key={date}
-					className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-4 shadow-lg shadow-black/20"
-				>
-					<div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-						<div>
-							<h3 className="text-xl font-semibold text-white">{date}</h3>
-							<p className="text-sm text-slate-400">
-								{count} photo{count === 1 ? "" : "s"}
-							</p>
-							{locations.length ? (
-								<div className="mt-2 flex flex-wrap gap-2">
-									{locations.slice(0, MAX_LOCATION_LABELS).map((location) => (
-										<span
-											key={`${date}:${location}`}
-											className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2.5 py-1 text-xs font-medium text-sky-100"
-										>
-											{location}
-										</span>
-									))}
-									{locations.length > MAX_LOCATION_LABELS ? (
-										<span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-slate-300">
-											+{locations.length - MAX_LOCATION_LABELS} more
-										</span>
+				{dates.map(({ date, count, locations }) => {
+					const anchorId = getDayAnchorId(date);
+					return (
+						<section
+							id={anchorId}
+							key={date}
+							className="scroll-mt-6 rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-4 shadow-lg shadow-black/20"
+						>
+							<div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+								<div>
+									<h3 className="text-xl font-semibold text-white">{date}</h3>
+									<p className="text-sm text-slate-400">
+										{count} photo{count === 1 ? "" : "s"}
+									</p>
+									{locations.length ? (
+										<div className="mt-2 flex flex-wrap gap-2">
+											{locations.slice(0, MAX_LOCATION_LABELS).map((location) => (
+												<span
+													key={`${date}:${location}`}
+													className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2.5 py-1 text-xs font-medium text-sky-100"
+												>
+													{location}
+												</span>
+											))}
+											{locations.length > MAX_LOCATION_LABELS ? (
+												<span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-slate-300">
+													+{locations.length - MAX_LOCATION_LABELS} more
+												</span>
+											) : null}
+										</div>
 									) : null}
 								</div>
-							) : null}
+							</div>
+							{!isSSR && <GalleryOneDay sectionId={section.id} folder={folder} date={date} />}
+						</section>
+					);
+				})}
+			</div>
+
+			<aside className="hidden xl:block">
+				<div className="rounded-[1.5rem] border border-white/10 bg-slate-950/55 p-3 shadow-xl shadow-black/20">
+					<div className="px-2 pb-3">
+						<div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+							Days
 						</div>
+						<div className="mt-2 text-sm text-slate-500">Jump to a date</div>
 					</div>
-					{!isSSR && <GalleryOneDay sectionId={section.id} folder={folder} date={date} />}
-				</section>
-			))}
+					<nav aria-label="Jump to day" className="space-y-2">
+						{dates.map(({ date, count }) => (
+							<a
+								key={`jump:${date}`}
+								href={`#${getDayAnchorId(date)}`}
+								className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-sky-300/30 hover:bg-sky-300/10 hover:text-white"
+							>
+								<span className="font-medium">{formatDateJumpLabel(date)}</span>
+								<span className="text-xs text-slate-500">{count}</span>
+							</a>
+						))}
+					</nav>
+				</div>
+			</aside>
 		</div>
 	);
 }
@@ -106,4 +135,16 @@ function normalizeDaySummary(summary: number | DaySummary | undefined) {
 			? summary.locations.filter((location): location is string => typeof location === "string" && !!location)
 			: [],
 	};
+}
+
+function getDayAnchorId(date: string) {
+	return `day-${date}`;
+}
+
+function formatDateJumpLabel(date: string) {
+	if (!/^\d{8}$/.test(date)) {
+		return date;
+	}
+
+	return `${date.slice(4, 6)}-${date.slice(6, 8)}`;
 }
