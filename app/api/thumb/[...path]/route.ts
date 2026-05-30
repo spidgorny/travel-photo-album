@@ -3,6 +3,12 @@ import fs from "fs";
 import { Readable } from "stream";
 import invariant from "tiny-invariant";
 import config from "../../../../lib/config";
+import { readStoredMetaForFile } from "../../../../lib/file-meta";
+import {
+	serializeSectionForWorker,
+	thumbJobActions,
+} from "../../../../lib/thumb-jobs";
+import { ThumbQueue } from "../../../../lib/thumb-queue";
 import {
 	ensureSectionThumb,
 	getMediaKind,
@@ -26,18 +32,35 @@ export async function GET(_request: Request, { params }: RouteContext) {
 		const section = getSectionById(config.sections, sectionId);
 		invariant(section, "section");
 		invariant(section.path, "section.path");
-		if (getMediaKind(filePath) === "unsupported") {
+		const mediaKind = getMediaKind(filePath);
+		if (mediaKind === "unsupported") {
 			return Response.json(jsonError(new Error("unsupported media type")), {
 				status: 415,
 			});
 		}
 
-		const thumb = await ensureSectionThumb(
-			Number(sectionId),
-			section,
-			filePath,
-			variant,
-		);
+		const numericSectionId = Number(sectionId);
+		const shouldWarmMetadata = mediaKind === "image";
+		const [thumb, storedMeta] = await Promise.all([
+			ensureSectionThumb(
+				numericSectionId,
+				section,
+				filePath,
+				variant,
+			),
+			shouldWarmMetadata ? readStoredMetaForFile(section, filePath) : Promise.resolve(null),
+		]);
+		if (shouldWarmMetadata && !storedMeta) {
+			const queue = new ThumbQueue();
+			await queue.enqueue({
+				action: thumbJobActions.warmSectionFile,
+				sectionId: numericSectionId,
+				section: serializeSectionForWorker(section),
+				filePath,
+				variant,
+			});
+		}
+
 		const stream =
 			"buffer" in thumb
 				? Readable.from(thumb.buffer)

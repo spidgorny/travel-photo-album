@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
+import { FolderInfoSidebar } from "./folder-info-sidebar";
 import { GalleryOneDay } from "./gallery-one-day";
 import type { DatesResponse, DaySummary, UISection } from "./ui-types";
 import { Loading } from "./widget/loading";
@@ -14,6 +16,7 @@ interface GalleryForProps {
 export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 	const apiUrl = `/api/dates/${section.id}/${folder}`;
 	const { data } = useSWR<DatesResponse>(apiUrl, fetcher);
+	const [isFolderInfoOpen, setIsFolderInfoOpen] = useState(false);
 
 	if (!data) {
 		return (
@@ -41,10 +44,29 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 
 	return (
 		<div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_7rem]">
+			<FolderInfoSidebar
+				isOpen={isFolderInfoOpen}
+				onClose={() => setIsFolderInfoOpen(false)}
+				sectionId={section.id}
+				collectionName={section.name}
+				folder={folder}
+			/>
 			<div className="space-y-6">
 				<div className="flex flex-col gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-end sm:justify-between">
 					<div>
-						<h2 className="text-2xl font-semibold text-white">Photo timeline</h2>
+						<div className="flex flex-wrap items-center gap-3">
+							<h2 className="text-2xl font-semibold text-white">Photo timeline</h2>
+							<button
+								type="button"
+								onClick={() => setIsFolderInfoOpen(true)}
+								className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-slate-200 transition hover:border-sky-300/30 hover:text-white"
+							>
+								<span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-sky-300/30 bg-sky-300/10 text-[11px] text-sky-100">
+									i
+								</span>
+								Folder info
+							</button>
+						</div>
 						<p className="text-sm text-slate-400">
 							Photos are grouped by capture day for quick scanning.
 						</p>

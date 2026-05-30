@@ -166,6 +166,20 @@ async function getThumbMeta(sectionId, filePath, variant) {
 	}
 }
 
+export async function getStoredThumbMetaEntry(sectionId, filePath, variant) {
+	const meta = await getThumbMeta(sectionId, filePath, variant);
+	if (!meta) {
+		return null;
+	}
+	return {
+		mimeType: meta.mimeType || "image/jpeg",
+		width: parseNumber(meta.originalWidth, 3),
+		height: parseNumber(meta.originalHeight, 2),
+		dominantColor: meta.dominantColor || defaultDominantColor,
+		updatedAt: meta.updatedAt || null,
+	};
+}
+
 async function setThumbMeta(sectionId, filePath, metadata, variant) {
 	const client = await getThumbKvClient();
 	if (!client) {

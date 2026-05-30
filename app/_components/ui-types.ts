@@ -118,6 +118,26 @@ export interface AppInfoResponse {
 	updatedAt: string;
 }
 
+export interface FolderInfoResponse {
+	sectionId: number;
+	collection: string;
+	folder: string;
+	storageMode: "kv" | "disk";
+	counts: {
+		originalFiles: number;
+		imageFiles: number;
+		videoFiles: number;
+		unsupportedFiles: number;
+		thumbnails: number;
+		metadataEntries: number;
+		exifEntries: number;
+		dominantColors: number;
+		kvThumbEntries: number;
+		kvMetaEntries: number;
+	};
+	updatedAt: string;
+}
+
 export interface GalleryPhoto extends FilesApiEntry {
 	key: string;
 	src: string;

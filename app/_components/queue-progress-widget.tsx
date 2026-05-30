@@ -44,7 +44,7 @@ export function QueueProgressWidget() {
 		<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-[19rem] lg:shrink-0">
 			<div className="flex items-center justify-between gap-3">
 				<div className="text-xs uppercase tracking-[0.2em] text-slate-400">Queue progress</div>
-				<div className="text-xs font-medium text-sky-100">{percentDone.toFixed(0)}%</div>
+				<div className="text-xs font-medium text-sky-100">{percentDone.toFixed(1)}%</div>
 			</div>
 			<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
 				<div

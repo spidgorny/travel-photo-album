@@ -41,7 +41,9 @@ export function InfoSidebar({
 
 	return (
 		<div
-			className={`fixed inset-0 z-50 transition ${isOpen ? "pointer-events-auto" : "pointer-events-none"}`}
+			className={`fixed inset-0 z-50 overflow-hidden transition ${
+				isOpen ? "pointer-events-auto" : "pointer-events-none"
+			}`}
 			aria-hidden={!isOpen}
 		>
 			<button
@@ -54,7 +56,7 @@ export function InfoSidebar({
 			/>
 			<aside
 				className={`absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-white/10 bg-slate-950/95 shadow-2xl shadow-black/50 backdrop-blur-xl transition-transform duration-300 ${
-					isOpen ? "translate-x-0" : "translate-x-full"
+					isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
 				}`}
 			>
 				<div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
