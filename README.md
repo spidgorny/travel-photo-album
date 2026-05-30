@@ -12,19 +12,27 @@ yarn dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-### Optional Kvrocks cache, BullMQ worker, and thumbnail store
+### Optional Kvrocks cache, Redis queue, BullMQ worker, and thumbnail store
 
 Folder listings used by `/api/files/...` can be cached in Kvrocks during local development, generated thumbnails for sections without `thumbPath` are persisted there, and BullMQ jobs can now be drained by a dedicated permanent worker.
-Kvrocks speaks the Redis protocol, so the existing folder cache, thumbnail blob store, and BullMQ queue can share the same instance.
+BullMQ now uses a dedicated Redis instance, while Kvrocks remains available for the folder cache and thumbnail blob store.
 Set `REDIS_FOLDER_CACHE_TTL_SECONDS=0` to keep cached entries forever.
 
 ```bash
 cp .env.example .env.local
 cp .env.example .env
-docker compose up -d kvrocks media-worker
+docker compose up -d kvrocks redis media-worker
 ```
 
-The worker container expects the media root to be mounted at the same Linux path used by `config.json` (defaults to `/media/nas/photo`). Override `MEDIA_ROOT_HOST_PATH` in `.env` if your host uses a different mount point.
+The scanner and worker scripts (`warmup:thumbs`, `queue:scan`, `worker:media`) load `.env` automatically via `dotenv`, so queue/cache settings apply even when you run them directly with `npm run ...`.
+
+The worker container expects the media root to be mounted at the same Linux path used by `config.json` (defaults to `/media/nas/photo` inside the container). On macOS/Docker Desktop the host path now defaults to `/Volumes/photo`; override `MEDIA_ROOT_HOST_PATH` in `.env` if your library is mounted somewhere else, and make sure that host path is shared with Docker.
+
+By default:
+
+- `REDIS_URL` and `THUMB_KV_URL` point at Kvrocks on port `6666`
+- `THUMB_QUEUE_URL` and `BULLMQ_REDIS_URL` point at the dedicated Redis container on port `6379`
+- `MEDIA_WORKER_*` overrides are available if the worker container needs different in-network URLs than your local host setup
 
 Restart Kvrocks automatically when its critical config changes:
 

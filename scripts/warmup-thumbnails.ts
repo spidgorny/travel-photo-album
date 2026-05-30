@@ -1,4 +1,5 @@
 // @ts-nocheck
+import "../lib/load-env.ts";
 import fs from "fs/promises";
 import mime from "mime-types";
 import process from "process";
@@ -12,6 +13,9 @@ import {
 	closeThumbKvClient,
 	isVideoPath,
 } from "../lib/thumb-store.ts";
+
+const ANSI_RED = "\u001b[31m";
+const ANSI_RESET = "\u001b[0m";
 
 async function main() {
 	const startedAt = Date.now();
@@ -32,18 +36,12 @@ async function main() {
 	}
 	console.log("Scanning folders recursively...");
 	const scanStats = { directories: 0, files: 0 };
-	const files = await scanCollectionFiles(section, [], scanStats);
 	let enqueued = 0;
 	let skipped = 0;
 	let failed = 0;
-
-	console.log(
-		`Scan complete: ${scanStats.directories} director${scanStats.directories === 1 ? "y" : "ies"}, ${files.length} candidate files`,
-	);
 	const queue = new ThumbQueue();
-
-	for (const [index, filePath] of files.entries()) {
-		const progressLabel = `[${index + 1}/${files.length}]`;
+	await scanCollectionFiles(section, [], scanStats, async (filePath, index) => {
+		const progressLabel = `[${index}]`;
 		const fullPath = joinSectionPath(section.path, filePath);
 		const mimeType = mime.lookup(fullPath) || "";
 		const isMedia = mimeType.startsWith("image/") || isVideoPath(filePath);
@@ -52,7 +50,7 @@ async function main() {
 			console.warn(
 				`skipped ${progressLabel} ${filePath.join("/")} (${mimeType || "unknown"})`,
 			);
-			continue;
+			return;
 		}
 
 		try {
@@ -71,13 +69,18 @@ async function main() {
 			const message = error instanceof Error ? error.message : String(error);
 			console.error(`failed ${progressLabel} ${filePath.join("/")} ${message}`);
 		}
-	}
+	});
 
 	console.log(
-		`Warmup complete for collection ${sectionId}: ${section.name} (${enqueued} enqueued, ${skipped} skipped, ${failed} failed) in ${formatDuration(Date.now() - startedAt)}`,
+		`Scan complete: ${scanStats.directories} director${scanStats.directories === 1 ? "y" : "ies"}, ${scanStats.files} candidate files`,
 	);
+
+	const summary = `Warmup complete for collection ${sectionId}: ${section.name} (${enqueued} enqueued, ${skipped} skipped, ${failed} failed) in ${formatDuration(Date.now() - startedAt)}`;
 	if (failed > 0) {
+		console.error(`${ANSI_RED}${summary}${ANSI_RESET}`);
 		process.exitCode = 1;
+	} else {
+		console.log(summary);
 	}
 }
 
@@ -97,7 +100,7 @@ function resolveCollectionId(collectionInput: string) {
 	return sectionId;
 }
 
-async function scanCollectionFiles(section, rootSegments, scanStats) {
+async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
 	invariant(section.path, "section.path");
 	const entries = await readDirectoryEntries(section, rootSegments);
 	const boundedEntries = applySectionBounds(entries, section, rootSegments);
@@ -106,12 +109,11 @@ async function scanCollectionFiles(section, rootSegments, scanStats) {
 	console.log(
 		`scan [dir ${scanStats.directories}] ${displayPath} (${boundedEntries.length} entries)`,
 	);
-	const files = [];
 
 	for (const entry of boundedEntries) {
 		const nextPath = [...rootSegments, entry.name];
 		if (entry.isDirectory()) {
-			files.push(...(await scanCollectionFiles(section, nextPath, scanStats)));
+			await scanCollectionFiles(section, nextPath, scanStats, onFile);
 			continue;
 		}
 		if (entry.isFile()) {
@@ -119,11 +121,9 @@ async function scanCollectionFiles(section, rootSegments, scanStats) {
 			if (scanStats.files % 250 === 0) {
 				console.log(`scan progress: discovered ${scanStats.files} files so far`);
 			}
-			files.push(nextPath);
+			await onFile(nextPath, scanStats.files);
 		}
 	}
-
-	return files;
 }
 
 async function readDirectoryEntries(section, pathSegments) {

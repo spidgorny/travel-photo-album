@@ -1,4 +1,5 @@
 // @ts-nocheck
+import "../lib/load-env.ts";
 import { runTest } from "./bootstrap.ts";
 import { createMediaQueue, processMediaJob, resolveMediaJobName } from "../lib/media-worker.ts";
 

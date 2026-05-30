@@ -1,18 +1,21 @@
 // @ts-nocheck
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
 import { Queue } from "bullmq";
 import invariant from "tiny-invariant";
 import config from "./config.ts";
-import { joinSectionPath } from "./files.ts";
+import { buildImageMetaData, writeStoredMetaForFile } from "./file-meta.ts";
 import {
 thumbJobActions,
 thumbQueueName,
 thumbQueuePrefix,
 thumbQueueUrl,
 } from "./thumb-jobs.ts";
-import { ensureSectionThumb, thumbnailTargetWidth } from "./thumb-store.ts";
+import {
+ensureSectionThumb,
+getMediaKind,
+isVideoPath,
+thumbnailTargetWidth,
+} from "./thumb-store.ts";
 
 const defaultWorkerConcurrency = 2;
 const legacyEnsureSectionThumbJobName = "ensure-section-thumb";
@@ -35,7 +38,7 @@ process.env.THUMB_KV_URL?.trim() ||
 process.env.REDIS_URL?.trim();
 invariant(
 redisUrl,
-"Set THUMB_QUEUE_URL, THUMB_KV_URL, REDIS_URL, or BULLMQ_REDIS_URL before starting the worker",
+"Set THUMB_QUEUE_URL or BULLMQ_REDIS_URL before starting the worker",
 );
 return redisUrl;
 }
@@ -132,30 +135,32 @@ invariant(false, `no handler for ${resolvedJobName}`);
 async function storeImageMetadata(payload) {
 const section = resolveSection(payload?.sectionId, payload?.section);
 const filePath = normalizeFilePath(payload?.filePath);
-const metaFile = getMetaFile(section, filePath);
-const metaData = readMeta(metaFile);
-const baseName = path.basename(filePath.join("/"));
-metaData[baseName] = payload?.metaData;
-fs.mkdirSync(path.dirname(metaFile), { recursive: true });
-fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2));
-return { action: mediaJobNames.getMetaForFile, metaFile, baseName };
+if (getMediaKind(filePath) !== "image") {
+	return {
+		action: mediaJobNames.getMetaForFile,
+		filePath: filePath.join("/"),
+		skipped: true,
+		reason: "unsupported-media",
+	};
+}
+return {
+	action: mediaJobNames.getMetaForFile,
+	...writeStoredMetaForFile(section, filePath, payload?.metaData ?? {}),
+};
 }
 
 async function storeVideoMetadata(payload) {
 const section = resolveSection(payload?.sectionId, payload?.section);
 const filePath = normalizeFilePath(payload?.filePath);
-const metaFile = getMetaFile(section, filePath);
-const metaData = readMeta(metaFile);
-const baseName = path.basename(filePath.join("/"));
 const videoStream = payload?.data?.streams?.find(
 (stream) => stream.codec_type === "video",
 );
 invariant(videoStream, "video stream not found");
 const COMPUTED = { Width: videoStream.width, Height: videoStream.height };
-metaData[baseName] = { ...payload.data, COMPUTED };
-fs.mkdirSync(path.dirname(metaFile), { recursive: true });
-fs.writeFileSync(metaFile, JSON.stringify(metaData, null, 2));
-return { action: mediaJobNames.storeMetaForVideo, metaFile, baseName };
+return {
+action: mediaJobNames.storeMetaForVideo,
+...writeStoredMetaForFile(section, filePath, { ...payload.data, COMPUTED }),
+};
 }
 
 async function warmSectionThumb(payload) {
@@ -165,31 +170,29 @@ const filePath = normalizeFilePath(payload?.filePath);
 invariant(Number.isInteger(sectionId), "sectionId is required for warm-section-file");
 invariant(section, "section not found");
 invariant(section.path, "section.path");
+const mediaKind = getMediaKind(filePath);
+if (mediaKind === "unsupported") {
+return {
+	action: mediaJobNames.warmSectionFile,
+	filePath: filePath.join("/"),
+	skipped: true,
+	reason: "unsupported-media",
+};
+}
 const thumb = await ensureSectionThumb(
 sectionId,
 section,
 filePath,
 getEnsureSectionThumbVariant(payload),
 );
+if (mediaKind === "image" && !isVideoPath(filePath)) {
+const metaData = await buildImageMetaData(section, filePath);
+writeStoredMetaForFile(section, filePath, metaData);
+}
 return {
 action: mediaJobNames.warmSectionFile,
 filePath: filePath.join("/"),
 kind: thumb.kind,
 source: thumb.source,
 };
-}
-
-function getMetaFile(section, filePath) {
-const metaRoot = section?.thumbPath ?? section?.path;
-invariant(metaRoot, "section.path");
-const metaDir = path.dirname(joinSectionPath(metaRoot, filePath));
-return path.join(metaDir, "meta.json");
-}
-
-function readMeta(metaFile) {
-try {
-return JSON.parse(fs.readFileSync(metaFile, "utf8"));
-} catch {
-return {};
-}
 }

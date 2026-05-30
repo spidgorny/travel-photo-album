@@ -4,6 +4,7 @@ import invariant from "tiny-invariant";
 import config from "../../../../lib/config";
 import {
 	ensureSectionThumb,
+	getMediaKind,
 } from "../../../../lib/thumb-store";
 import {
 	getSectionById,
@@ -22,6 +23,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
 		const section = getSectionById(config.sections, sectionId);
 		invariant(section, "section");
 		invariant(section.path, "section.path");
+		if (getMediaKind(filePath) === "unsupported") {
+			return Response.json(jsonError(new Error("unsupported media type")), {
+				status: 415,
+			});
+		}
 
 		const thumb = await ensureSectionThumb(Number(sectionId), section, filePath);
 		const stream =

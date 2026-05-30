@@ -10,8 +10,8 @@ import invariant from "tiny-invariant";
 import { createClient } from "redis";
 import { joinSectionPath } from "./files.ts";
 
-const thumbKvUrl = process.env.THUMB_KV_URL?.trim() || process.env.REDIS_URL?.trim();
-const thumbKvPrefix =
+export const thumbKvUrl = process.env.THUMB_KV_URL?.trim() || process.env.REDIS_URL?.trim();
+export const thumbKvPrefix =
 	process.env.THUMB_KV_PREFIX?.trim() || "travel-photo-album:thumb:v1";
 const defaultThumbnailWidth = 256;
 const parsedThumbnailWidth = Number(
@@ -52,6 +52,21 @@ function buildThumbKeys(sectionId, filePath, variant) {
 
 export function isVideoPath(filePath) {
 	return /\.(mp4|mov|avi|mkv)$/i.test(filePath.join("/"));
+}
+
+export function getMediaKind(filePath) {
+	if (isVideoPath(filePath)) {
+		return "video";
+	}
+	const mimeType = mime.lookup(filePath.join("/")) || "";
+	if (mimeType.startsWith("image/")) {
+		return "image";
+	}
+	return "unsupported";
+}
+
+export function isImagePath(filePath) {
+	return getMediaKind(filePath) === "image";
 }
 
 function parseNumber(value, fallback = null) {

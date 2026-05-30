@@ -9,3 +9,30 @@ export interface DatedFileEntry extends FilteredFileEntry {
 	fullPath: string;
 	date: Date;
 }
+
+export interface FileGpsCoordinates {
+	latitude: number;
+	longitude: number;
+}
+
+export interface FileLocationLabel {
+	label: string;
+	locality: string;
+	countryIso2?: string;
+	countryName?: string;
+}
+
+export interface StoredDirectoryMetaEntry extends Record<string, unknown> {
+	COMPUTED: {
+		Width?: number;
+		Height?: number;
+		width?: number;
+		height?: number;
+	};
+	GPS?: FileGpsCoordinates;
+	location?: FileLocationLabel;
+}
+
+export interface DailyLocationSummary extends FileLocationLabel {
+	count: number;
+}

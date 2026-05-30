@@ -1,4 +1,8 @@
 import type { ConfigSection } from "../../lib/config";
+import type {
+	DailyLocationSummary,
+	FileLocationLabel,
+} from "../../lib/files-types";
 
 export interface UISection extends ConfigSection {
 	id: number;
@@ -24,7 +28,13 @@ export interface FilesApiEntry {
 
 export interface DatesResponse {
 	sectionId?: number;
-	dates?: Record<string, number>;
+	dates?: Record<string, number | DaySummary>;
+	locationsByDate?: Record<string, DailyLocationSummary[]>;
+}
+
+export interface DaySummary {
+	count: number;
+	locations?: string[];
 }
 
 export interface FilesResponse {
@@ -40,11 +50,72 @@ export interface MetaResponse {
 		width?: number;
 		height?: number;
 	};
+	GPS?: {
+		latitude?: number;
+		longitude?: number;
+	};
+	location?: FileLocationLabel;
 	dimensions?: {
 		width?: number;
 		height?: number;
 	};
 	[key: string]: unknown;
+}
+
+export interface QueueCounts {
+	waiting: number;
+	active: number;
+	delayed: number;
+	completed: number;
+	failed: number;
+	paused: number;
+}
+
+export interface QueueInfo {
+	configured: boolean;
+	connectionUrl: string | null;
+	name: string;
+	prefix: string;
+	counts: QueueCounts;
+	totalQueued: number;
+	totalProcessed: number;
+}
+
+export interface ThumbStorageRootInfo {
+	path: string;
+	exists: boolean;
+	directories: number;
+	thumbnailFiles: number;
+	metaFiles: number;
+	totalBytes: number;
+}
+
+export interface ThumbStorageInfo {
+	configuredSections: number;
+	diskBackedSections: number;
+	kvBackedSections: number;
+	disk: {
+		configuredRoots: number;
+		missingRoots: number;
+		directories: number;
+		thumbnailFiles: number;
+		metaFiles: number;
+		totalBytes: number;
+	};
+	diskRoots: ThumbStorageRootInfo[];
+	kv: {
+		configured: boolean;
+		connectionUrl: string | null;
+		prefix: string;
+		blobEntries: number;
+		metaEntries: number;
+	};
+}
+
+export interface AppInfoResponse {
+	queue: QueueInfo;
+	storage: ThumbStorageInfo;
+	updatedAt: string;
 }
 
 export interface GalleryPhoto extends FilesApiEntry {

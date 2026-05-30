@@ -1,7 +1,4 @@
-import fs from "fs";
-import path from "path";
 import sizeOf from "image-size";
-import mime from "mime-types";
 import FfmpegCommand, { type FfprobeData } from "fluent-ffmpeg";
 import { NextResponse } from "next/server";
 import invariant from "tiny-invariant";
@@ -13,9 +10,16 @@ import {
 } from "../../../../lib/api-route";
 import { joinSectionPath } from "../../../../lib/files";
 import {
+	buildBasicFileMetaData,
+	buildImageMetaData,
+	readStoredMetaForFile,
+} from "../../../../lib/file-meta";
+import type { StoredDirectoryMetaEntry } from "../../../../lib/files-types";
+import {
 	thumbJobActions,
 	type ThumbImageMetaData,
 } from "../../../../lib/thumb-jobs";
+import { getMediaKind } from "../../../../lib/thumb-store";
 import { ThumbQueue } from "../../../../lib/thumb-queue";
 
 interface MetaComputedDimensions {
@@ -25,14 +29,7 @@ interface MetaComputedDimensions {
 	height?: number;
 }
 
-interface JsonDirectoryMetaEntry extends Record<string, unknown> {
-	COMPUTED: {
-		Width: number;
-		Height: number;
-	};
-}
-
-interface JsonMetaData extends JsonDirectoryMetaEntry {
+interface JsonMetaData extends StoredDirectoryMetaEntry {
 	width: number;
 	height: number;
 }
@@ -121,29 +118,9 @@ async function getMetaByJson(
 	filePath: string[],
 ): Promise<JsonMetaData | null> {
 	if (!section.thumbPath) {
-		return null;
+		return readMetaFromStorage(section, filePath);
 	}
-	const fullPath = joinSectionPath(section.thumbPath, filePath);
-	const metaFile = path.posix.join(path.dirname(fullPath), "meta.json");
-
-	try {
-		fs.accessSync(metaFile, fs.constants.F_OK);
-		const dirMeta = JSON.parse(
-			fs.readFileSync(metaFile, "utf8"),
-		) as Record<string, JsonDirectoryMetaEntry>;
-		const fileBaseName = path.basename(fullPath);
-		const fileMeta = dirMeta[fileBaseName];
-		if (!fileMeta) {
-			return null;
-		}
-		return {
-			...fileMeta,
-			width: fileMeta.COMPUTED.Width,
-			height: fileMeta.COMPUTED.Height,
-		};
-	} catch {
-		return null;
-	}
+	return readMetaFromStorage(section, filePath);
 }
 
 async function getMetaByFile(
@@ -151,24 +128,14 @@ async function getMetaByFile(
 	section: ConfigSection,
 	filePath: string[],
 ): Promise<FileMetaData | VideoMetaData> {
-	if (isVideo(filePath.join("/"))) {
+	const mediaKind = getMediaKind(filePath);
+	if (mediaKind === "video") {
 		return getVideoMeta(sectionId, section, filePath);
 	}
-	invariant(section.path, "section.path");
-	const fullPath = joinSectionPath(section.path, filePath);
-	const mimeType = mime.lookup(fullPath);
-	const dimensions = sizeOf(fs.readFileSync(fullPath));
-
-	const metaData: ThumbImageMetaData = {
-		FileName: path.basename(fullPath),
-		MimeType: mimeType,
-		FileSize: fs.statSync(fullPath).size,
-		COMPUTED: {
-			Width: dimensions.width,
-			Height: dimensions.height,
-		},
-		dimensions,
-	};
+	if (mediaKind !== "image") {
+		return buildBasicFileMetaData(section, filePath) as FileMetaData;
+	}
+	const metaData = await buildImageMetaData(section, filePath);
 
 	const queue = new ThumbQueue();
 	await queue.enqueue({
@@ -181,8 +148,19 @@ async function getMetaByFile(
 	return metaData as FileMetaData;
 }
 
-function isVideo(fullPath: string): boolean {
-	return fullPath.toLowerCase().endsWith("mp4");
+function readMetaFromStorage(
+	section: ConfigSection,
+	filePath: string[],
+): JsonMetaData | null {
+	const fileMeta = readStoredMetaForFile(section, filePath);
+	if (!fileMeta?.COMPUTED?.Width || !fileMeta?.COMPUTED?.Height) {
+		return null;
+	}
+	return {
+		...fileMeta,
+		width: fileMeta.COMPUTED.Width,
+		height: fileMeta.COMPUTED.Height,
+	};
 }
 
 async function getVideoMeta(

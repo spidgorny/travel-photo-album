@@ -12,6 +12,13 @@ services:
         - action: restart
           path: ./docker/kvrocks/kvrocks.conf
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   media-worker:
     build:
       context: .
@@ -21,10 +28,12 @@ services:
     command: npm run worker:media
     depends_on:
       - kvrocks
+      - redis
     environment:
-      REDIS_URL: ${REDIS_URL:-redis://kvrocks:6666}
-      THUMB_KV_URL: ${THUMB_KV_URL:-redis://kvrocks:6666}
-      THUMB_QUEUE_URL: ${THUMB_QUEUE_URL:-redis://kvrocks:6666}
+      REDIS_URL: ${MEDIA_WORKER_REDIS_URL:-redis://kvrocks:6666}
+      THUMB_KV_URL: ${MEDIA_WORKER_THUMB_KV_URL:-redis://kvrocks:6666}
+      BULLMQ_REDIS_URL: ${MEDIA_WORKER_BULLMQ_REDIS_URL:-redis://redis:6379}
+      THUMB_QUEUE_URL: ${MEDIA_WORKER_THUMB_QUEUE_URL:-redis://redis:6379}
       THUMB_QUEUE_NAME: ${THUMB_QUEUE_NAME:-thumb-jobs}
       THUMB_QUEUE_PREFIX: ${THUMB_QUEUE_PREFIX:-travel-photo-album}
       BULLMQ_WORKER_CONCURRENCY: ${BULLMQ_WORKER_CONCURRENCY:-2}
@@ -34,7 +43,11 @@ services:
     restart: unless-stopped
     volumes:
       - ./data:/app/data
-      - ${MEDIA_ROOT_HOST_PATH:-/media/nas/photo}:${MEDIA_ROOT_CONTAINER_PATH:-/media/nas/photo}:ro
+      - type: bind
+        source: ${MEDIA_ROOT_HOST_PATH:-/Volumes/photo}
+        target: ${MEDIA_ROOT_CONTAINER_PATH:-/media/nas/photo}
+        read_only: true
 
 volumes:
   kvrocks_data:
+  redis_data:

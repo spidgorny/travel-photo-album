@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import { GalleryOneDay } from "./gallery-one-day";
-import type { DatesResponse, UISection } from "./ui-types";
+import type { DatesResponse, DaySummary, UISection } from "./ui-types";
 import { Loading } from "./widget/loading";
 
 interface GalleryForProps {
@@ -23,9 +23,12 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 		);
 	}
 
-	const dates = Object.entries(data.dates ?? {}).sort(([firstDate], [secondDate]) =>
-		secondDate.localeCompare(firstDate),
-	);
+	const dates = Object.entries(data.dates ?? {})
+		.map(([date, summary]) => ({
+			date,
+			...normalizeDaySummary(summary),
+		}))
+		.sort(({ date: firstDate }, { date: secondDate }) => secondDate.localeCompare(firstDate));
 	const isSSR = typeof window === "undefined";
 
 	if (!dates.length) {
@@ -49,7 +52,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 					{dates.length} day{dates.length === 1 ? "" : "s"}
 				</div>
 			</div>
-			{dates.map(([date, count]) => (
+			{dates.map(({ date, count, locations }) => (
 				<section
 					key={date}
 					className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-4 shadow-lg shadow-black/20"
@@ -60,6 +63,23 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 							<p className="text-sm text-slate-400">
 								{count} photo{count === 1 ? "" : "s"}
 							</p>
+							{locations.length ? (
+								<div className="mt-2 flex flex-wrap gap-2">
+									{locations.slice(0, MAX_LOCATION_LABELS).map((location) => (
+										<span
+											key={`${date}:${location}`}
+											className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2.5 py-1 text-xs font-medium text-sky-100"
+										>
+											{location}
+										</span>
+									))}
+									{locations.length > MAX_LOCATION_LABELS ? (
+										<span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-slate-300">
+											+{locations.length - MAX_LOCATION_LABELS} more
+										</span>
+									) : null}
+								</div>
+							) : null}
 						</div>
 					</div>
 					{!isSSR && <GalleryOneDay sectionId={section.id} folder={folder} date={date} />}
@@ -67,4 +87,23 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 			))}
 		</div>
 	);
+}
+
+const MAX_LOCATION_LABELS = 3;
+
+function normalizeDaySummary(summary: number | DaySummary | undefined) {
+	if (typeof summary === "number") {
+		return { count: summary, locations: [] as string[] };
+	}
+
+	if (!summary || typeof summary !== "object") {
+		return { count: 0, locations: [] as string[] };
+	}
+
+	return {
+		count: typeof summary.count === "number" ? summary.count : 0,
+		locations: Array.isArray(summary.locations)
+			? summary.locations.filter((location): location is string => typeof location === "string" && !!location)
+			: [],
+	};
 }

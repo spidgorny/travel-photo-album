@@ -1,4 +1,5 @@
 // @ts-nocheck
+import "../lib/load-env.ts";
 import fs from "fs/promises";
 import mime from "mime-types";
 import process from "process";
@@ -33,24 +34,18 @@ console.log(`Root path: ${section.path}`);
 console.log("Scanning folders recursively...");
 
 const scanStats = { directories: 0, files: 0 };
-const files = await scanCollectionFiles(section, [], scanStats);
-console.log(
-`Scan complete: ${scanStats.directories} director${scanStats.directories === 1 ? "y" : "ies"}, ${files.length} candidate files`,
-);
-
 const queue = createMediaQueue();
 let enqueued = 0;
 let skipped = 0;
-
-for (let batchStart = 0; batchStart < files.length; batchStart += batchSize) {
 const batchEntries = [];
-for (const filePath of files.slice(batchStart, batchStart + batchSize)) {
+
+await scanCollectionFiles(section, [], scanStats, async (filePath) => {
 const fullPath = joinSectionPath(section.path, filePath);
 const mimeType = mime.lookup(fullPath) || "";
 const isMedia = mimeType.startsWith("image/") || isVideoPath(filePath);
 if (!isMedia) {
 skipped += 1;
-continue;
+return;
 }
 const payload = {
 sectionId,
@@ -64,18 +59,29 @@ opts: {
 jobId: `thumb:${mediaJobNames.warmSectionFile}:${buildMediaJobId(mediaJobNames.warmSectionFile, payload)}`,
 },
 });
-}
-if (!batchEntries.length) {
-continue;
-}
-await queue.addBulk(batchEntries);
+if (batchEntries.length >= batchSize) {
+await flushBatch(queue, batchEntries, {
+enqueued,
+skipped,
+scanned: scanStats.files,
+});
 enqueued += batchEntries.length;
-console.log(
-`enqueued ${enqueued}/${files.length - skipped} warmup jobs (${Math.min(batchStart + batchSize, files.length)}/${files.length} scanned)`,
-);
+batchEntries.length = 0;
 }
+});
+
+await flushBatch(queue, batchEntries, {
+enqueued,
+skipped,
+scanned: scanStats.files,
+});
+enqueued += batchEntries.length;
+batchEntries.length = 0;
 
 await queue.close();
+console.log(
+`Scan complete: ${scanStats.directories} director${scanStats.directories === 1 ? "y" : "ies"}, ${scanStats.files} candidate files`,
+);
 console.log(
 `Queued ${enqueued} warmup jobs (${skipped} skipped) in ${formatDuration(Date.now() - startedAt)}`,
 );
@@ -97,25 +103,32 @@ invariant(sectionId >= 0, `section not found: ${collectionInput}`);
 return sectionId;
 }
 
-async function scanCollectionFiles(section, rootSegments, scanStats) {
+async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
 const entries = await readDirectoryEntries(section, rootSegments);
 const boundedEntries = applySectionBounds(entries, section, rootSegments);
 scanStats.directories += 1;
-const files = [];
 
 for (const entry of boundedEntries) {
 const nextPath = [...rootSegments, entry.name];
 if (entry.isDirectory()) {
-files.push(...(await scanCollectionFiles(section, nextPath, scanStats)));
+await scanCollectionFiles(section, nextPath, scanStats, onFile);
 continue;
 }
 if (entry.isFile()) {
 scanStats.files += 1;
-files.push(nextPath);
+await onFile(nextPath, scanStats.files);
+}
 }
 }
 
-return files;
+async function flushBatch(queue, batchEntries, stats) {
+if (!batchEntries.length) {
+return;
+}
+await queue.addBulk(batchEntries);
+console.log(
+`enqueued ${stats.enqueued + batchEntries.length} warmup jobs (${stats.scanned} scanned, ${stats.skipped} skipped)`,
+);
 }
 
 async function readDirectoryEntries(section, pathSegments) {

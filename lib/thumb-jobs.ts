@@ -1,7 +1,9 @@
 import type { FfprobeData } from "fluent-ffmpeg";
+import type { StoredDirectoryMetaEntry } from "./files-types.ts";
 
 export const thumbQueueUrl =
 	process.env.THUMB_QUEUE_URL?.trim() ||
+	process.env.BULLMQ_REDIS_URL?.trim() ||
 	process.env.THUMB_KV_URL?.trim() ||
 	process.env.REDIS_URL?.trim() ||
 	"";
@@ -18,14 +20,10 @@ export const thumbJobActions = {
 
 export type ThumbJobAction = (typeof thumbJobActions)[keyof typeof thumbJobActions];
 
-export interface ThumbImageMetaData extends Record<string, unknown> {
+export interface ThumbImageMetaData extends StoredDirectoryMetaEntry {
 	FileName: string;
 	MimeType: string | false;
 	FileSize: number;
-	COMPUTED: {
-		Width?: number;
-		Height?: number;
-	};
 	dimensions: ReturnType<(typeof import("image-size"))["default"]>;
 }
 

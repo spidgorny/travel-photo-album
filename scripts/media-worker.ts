@@ -1,4 +1,5 @@
 // @ts-nocheck
+import "../lib/load-env.ts";
 import process from "process";
 import { Queue, Worker } from "bullmq";
 import { closeRedisClient } from "../lib/cache.ts";
@@ -38,17 +39,15 @@ const counts = await queue.getJobCounts(
 "waiting",
 "active",
 "delayed",
-"prioritized",
 "failed",
 );
 const pending =
 (counts.waiting ?? 0) +
 (counts.active ?? 0) +
-(counts.delayed ?? 0) +
-(counts.prioritized ?? 0);
+(counts.delayed ?? 0);
 const jobName = job ? resolveMediaJobName(job.name, job.data) : "unknown";
 console.log(
-`${context} ${job?.id ?? "unknown"} ${jobName} queue pending=${pending} waiting=${counts.waiting ?? 0} active=${counts.active ?? 0} delayed=${counts.delayed ?? 0} prioritized=${counts.prioritized ?? 0} failed=${counts.failed ?? 0}`,
+`${context} ${job?.id ?? "unknown"} ${jobName} queue pending=${pending} waiting=${counts.waiting ?? 0} active=${counts.active ?? 0} delayed=${counts.delayed ?? 0} failed=${counts.failed ?? 0}`,
 );
 }
 
