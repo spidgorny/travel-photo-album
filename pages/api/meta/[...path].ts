@@ -5,15 +5,15 @@ import sizeOf from "image-size";
 import mime from "mime-types";
 import FfmpegCommand, { type FfprobeData } from "fluent-ffmpeg";
 import invariant from "tiny-invariant";
-import config, { type ConfigSection } from "../../../lib/config.js";
+import config, { type ConfigSection } from "../../../lib/config";
 import {
 getCatchAllSegments,
 getSectionById,
 jsonError,
 toError,
 } from "../../../lib/api-route";
-import { joinSectionPath } from "../../../lib/files.mjs";
-import { ThumbQueue } from "../../../lib/thumb-queue.mjs";
+import { joinSectionPath } from "../../../lib/files";
+import { ThumbQueue } from "../../../lib/thumb-queue";
 
 interface MetaComputedDimensions {
 Width?: number;

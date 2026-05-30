@@ -2,13 +2,13 @@ import type { NextApiHandler } from "next";
 import fs from "fs";
 import mime from "mime-types";
 import invariant from "tiny-invariant";
-import config, { type ConfigSection } from "../../../lib/config.js";
+import config, { type ConfigSection } from "../../../lib/config";
 import {
 getCatchAllSegments,
 getSectionById,
 jsonError,
 } from "../../../lib/api-route";
-import { joinSectionPath } from "../../../lib/files.mjs";
+import { joinSectionPath } from "../../../lib/files";
 
 interface PhotoErrorResponse {
 sectionId?: string;

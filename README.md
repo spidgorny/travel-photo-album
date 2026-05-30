@@ -23,6 +23,12 @@ cp .env.example .env.local
 docker compose up -d kvrocks
 ```
 
+Restart Kvrocks automatically when its critical config changes:
+
+```bash
+docker compose watch kvrocks
+```
+
 Warm a section or folder ahead of browsing:
 
 ```bash

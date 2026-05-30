@@ -1,7 +1,7 @@
 import type { NextApiHandler } from "next";
 import { DateTime } from "luxon";
 import invariant from "tiny-invariant";
-import config, { type ConfigSection } from "../../../lib/config.js";
+import config, { type ConfigSection } from "../../../lib/config";
 import {
 getCatchAllSegments,
 getNumericSectionId,
@@ -9,7 +9,7 @@ getSectionById,
 jsonError,
 } from "../../../lib/api-route";
 import type { FilteredFileEntry } from "../../../lib/files-types";
-import { getFilteredFiles } from "../../../lib/files.mjs";
+import { getFilteredFiles } from "../../../lib/files";
 
 interface FilesSuccessResponse {
 sectionInput?: string;

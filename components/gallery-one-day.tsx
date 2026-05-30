@@ -79,6 +79,10 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 				height:
 					typeof file.height === "number" && file.height > 0 ? file.height : 2,
 				caption: fileName,
+				dominantColor:
+					typeof file.dominantColor === "string" && file.dominantColor
+						? file.dominantColor
+						: "#0f172a",
 				original:
 					typeof file.width === "number" && typeof file.height === "number"
 						? { width: file.width, height: file.height }
@@ -243,12 +247,14 @@ interface SelectedImageProps {
 }
 
 function SelectedImage({ index, photo, margin, selected, onClick }: SelectedImageProps) {
+	const [isLoaded, setIsLoaded] = useState(false);
 	const fileName = photo.path.split("/").at(-1) ?? photo.caption ?? "Photo";
 	const dimensionLabel =
 		photo.original?.width && photo.original?.height
 			? `${photo.original.width.toFixed(0)} x ${photo.original.height.toFixed(0)}`
 			: null;
 	const containerStyle: CSSProperties = {
+		backgroundColor: photo.dominantColor ?? "#0f172a",
 		cursor: "pointer",
 		margin,
 		overflow: "hidden",
@@ -269,11 +275,19 @@ function SelectedImage({ index, photo, margin, selected, onClick }: SelectedImag
 				title={photo.title ?? photo.caption}
 				alt={photo.title ?? photo.caption}
 				onClick={(event) => onClick(event, { photo, index })}
+				onLoad={() => setIsLoaded(true)}
+				onError={() => setIsLoaded(true)}
 				width={photo.width}
 				height={photo.height}
 				loading="lazy"
-				className="block h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+				className={[
+					"block h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]",
+					isLoaded ? "opacity-100" : "opacity-0",
+				].join(" ")}
 			/>
+			{!isLoaded ? (
+				<div className="pointer-events-none absolute inset-0 animate-pulse bg-white/10" />
+			) : null}
 			<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent px-3 pb-3 pt-10">
 				<div className="truncate text-sm font-medium text-white">{fileName}</div>
 				<div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-300/80">

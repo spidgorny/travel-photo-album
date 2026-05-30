@@ -1,7 +1,7 @@
 import type { NextApiHandler } from "next";
 import { DateTime } from "luxon";
 import invariant from "tiny-invariant";
-import config from "../../../lib/config.js";
+import config from "../../../lib/config";
 import {
 getCatchAllSegments,
 getNumericSectionId,
@@ -9,7 +9,7 @@ getSectionById,
 jsonError,
 } from "../../../lib/api-route";
 import type { DatedFileEntry } from "../../../lib/files-types";
-import { getFileDates } from "../../../lib/files.mjs";
+import { getFileDates } from "../../../lib/files";
 
 interface DatesSuccessResponse {
 sectionId: number;

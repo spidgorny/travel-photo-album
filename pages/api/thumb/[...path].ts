@@ -6,17 +6,17 @@ import mime from "mime-types";
 import sharp from "sharp";
 import FfmpegCommand from "fluent-ffmpeg";
 import invariant from "tiny-invariant";
-import config from "../../../lib/config.js";
+import config from "../../../lib/config";
 import {
 	ensureImageThumb,
 	thumbnailTargetWidth,
-} from "../../../lib/thumb-store.mjs";
+} from "../../../lib/thumb-store";
 import {
-getCatchAllSegments,
-getSectionById,
-jsonError,
+	getCatchAllSegments,
+	getSectionById,
+	jsonError,
 } from "../../../lib/api-route";
-import { joinSectionPath } from "../../../lib/files.mjs";
+import { joinSectionPath } from "../../../lib/files";
 
 interface StreamInfo {
 mimeType: string;

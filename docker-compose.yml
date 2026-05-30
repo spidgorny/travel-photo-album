@@ -3,9 +3,14 @@ services:
     image: apache/kvrocks:latest
     ports:
       - "6666:6666"
-    command: --bind 0.0.0.0
+    command: -c /etc/kvrocks/kvrocks.conf
     volumes:
       - kvrocks_data:/var/lib/kvrocks
+      - ./docker/kvrocks/kvrocks.conf:/etc/kvrocks/kvrocks.conf:ro
+    develop:
+      watch:
+        - action: restart
+          path: ./docker/kvrocks/kvrocks.conf
 
 volumes:
   kvrocks_data:

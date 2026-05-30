@@ -2,7 +2,7 @@ import Head from "next/head";
 import type { ChangeEvent } from "react";
 import { useRouter } from "next/router";
 import type { GetServerSideProps } from "next";
-import config from "../lib/config.js";
+import config from "../lib/config";
 import { GalleryFor } from "../components/gallery";
 import { SectionFolders } from "../components/nav/section-folders";
 import { firstQueryValue, type UISection } from "../components/ui-types";

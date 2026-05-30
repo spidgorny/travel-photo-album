@@ -12,6 +12,7 @@ export interface FilesApiEntry {
 	date?: string | Date;
 	width?: number;
 	height?: number;
+	dominantColor?: string;
 	original?: {
 		width: number;
 		height: number;

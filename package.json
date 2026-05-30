@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "warmup:thumbs": "node scripts/warmup-thumbnails.mjs"
+    "warmup:thumbs": "node scripts/warmup-thumbnails.ts"
   },
   "dependencies": {
     "@jsdevtools/readdir-enhanced": "^6.0.4",
