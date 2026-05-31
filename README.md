@@ -191,6 +191,7 @@ Important defaults from `.env.example`:
 
 - `REDIS_URL` and `THUMB_KV_URL` target Kvrocks on port `6666`
 - `BULLMQ_REDIS_URL` and `THUMB_QUEUE_URL` target Redis on port `6379`
+- `BULLMQ_WORKER_LOCK_DURATION_MS` controls how long the media worker keeps a BullMQ job lock before renewal; increase it for very slow thumbnail or metadata jobs
 - `DESCRIPTION_QUEUE_URL` controls the dedicated description queue
 - `OLLAMA_BASE_URL` and `OLLAMA_MODEL` control auto-generated descriptions
 - `MEDIA_ROOT_HOST_PATH` maps your host media path into Docker worker containers

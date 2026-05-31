@@ -390,11 +390,38 @@ async function getDominantColor(section, filePath) {
 	return getDominantColorFromFile(joinSectionPath(section.path, filePath));
 }
 
+async function getDimensionsFromBuffer(buffer) {
+	try {
+		const metadata = await sharp(buffer).metadata();
+		const width = metadata.width ?? 3;
+		const height = metadata.height ?? 2;
+		const orientation = metadata.orientation;
+		const shouldSwapSides = orientation && orientation >= 5 && orientation <= 8;
+		return {
+			width: shouldSwapSides ? height : width,
+			height: shouldSwapSides ? width : height,
+			mimeType: null,
+			dominantColor: null,
+		};
+	} catch {
+		const dimensions = sizeOf(buffer);
+		const orientation = dimensions.orientation;
+		const shouldSwapSides = orientation && orientation >= 5 && orientation <= 8;
+		return {
+			width: shouldSwapSides ? (dimensions.height ?? 2) : (dimensions.width ?? 3),
+			height: shouldSwapSides ? (dimensions.width ?? 3) : (dimensions.height ?? 2),
+			mimeType: null,
+			dominantColor: null,
+		};
+	}
+}
+
 export async function getImageDimensions(
 	sectionId,
 	section,
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
+	sourceBuffer = undefined,
 ) {
 	if (isVideoPath(filePath)) {
 		return {
@@ -409,9 +436,10 @@ export async function getImageDimensions(
 		return cached;
 	}
 	const discovered =
-		getDimensionsFromJson(section, filePath) ?? getDimensionsFromFile(section, filePath);
-	const dominantColor =
-		discovered.dominantColor ?? (await getDominantColor(section, filePath));
+		getDimensionsFromJson(section, filePath) ??
+		(sourceBuffer ? await getDimensionsFromBuffer(sourceBuffer) : getDimensionsFromFile(section, filePath));
+	const dominantColor = discovered.dominantColor ??
+		(sourceBuffer ? await getDominantColorFromBuffer(sourceBuffer) : await getDominantColor(section, filePath));
 	const enriched = {
 		...discovered,
 		dominantColor,
@@ -425,6 +453,7 @@ export async function ensureImageThumb(
 	section,
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
+	sourceBuffer = undefined,
 ) {
 	invariant(!isVideoPath(filePath), "ensureImageThumb only supports image files");
 	const cached = await getStoredThumb(sectionId, filePath, variant);
@@ -436,8 +465,9 @@ export async function ensureImageThumb(
 	}
 	invariant(section.path, "section.path");
 	const fullPath = joinSectionPath(section.path, filePath);
-	const dimensions = await getImageDimensions(sectionId, section, filePath, variant);
-	const buffer = await sharp(fullPath)
+	const sourceInput = sourceBuffer ?? fullPath;
+	const dimensions = await getImageDimensions(sectionId, section, filePath, variant, sourceBuffer);
+	const buffer = await sharp(sourceInput)
 		.rotate()
 		.resize({ width: thumbnailTargetWidth })
 		.jpeg()
@@ -565,7 +595,7 @@ export async function hasStoredSectionThumb(sectionId, section, filePath, varian
 	return Boolean(getExistingDiskThumb(section.thumbPath, filePath, candidates));
 }
 
-async function ensureResizedImageThumb(section, filePath) {
+async function ensureResizedImageThumb(section, filePath, sourceBuffer = undefined) {
 	invariant(section.path, "section.path");
 	invariant(section.thumbPath, "section.thumbPath");
 	const existing = getExistingDiskThumb(section.thumbPath, filePath, [null, ".webp"]);
@@ -576,11 +606,17 @@ async function ensureResizedImageThumb(section, filePath) {
 	const largeFile = joinSectionPath(section.path, filePath);
 	const thumbFile = getThumbFilePath(section.thumbPath, filePath);
 	fs.mkdirSync(path.dirname(thumbFile), { recursive: true });
-	await sharp(largeFile).rotate().resize({ width: thumbnailTargetWidth }).toFile(thumbFile);
+	const buffer = await sharp(sourceBuffer ?? largeFile)
+		.rotate()
+		.resize({ width: thumbnailTargetWidth })
+		.jpeg()
+		.toBuffer();
+	fs.writeFileSync(thumbFile, buffer);
 	return {
 		path: thumbFile,
 		mimeType: mime.lookup(thumbFile) || "application/octet-stream",
 		source: "generated:resize",
+		generatedBuffer: buffer,
 	};
 }
 
@@ -706,6 +742,7 @@ export async function ensureSectionThumb(
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
 	frameIndex,
+	options = undefined,
 ) {
 	if (isVideoPath(filePath)) {
 		try {
@@ -727,12 +764,12 @@ export async function ensureSectionThumb(
 	if (!section.thumbPath) {
 		return {
 			kind: "buffer",
-			...(await ensureImageThumb(sectionId, section, filePath, variant)),
+			...(await ensureImageThumb(sectionId, section, filePath, variant, options?.sourceBuffer)),
 		};
 	}
 
 	return {
 		kind: "file",
-		...(await ensureResizedImageThumb(section, filePath)),
+		...(await ensureResizedImageThumb(section, filePath, options?.sourceBuffer)),
 	};
 }

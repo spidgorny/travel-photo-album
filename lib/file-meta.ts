@@ -242,21 +242,30 @@ export async function updateStoredDescriptionForFile(
 export async function buildImageMetaData(
 	section: ConfigSection,
 	filePath: string[],
+	options: {
+		sourceBuffer?: Buffer;
+		phashSourceBuffer?: Buffer;
+		existingMeta?: StoredDirectoryMetaEntry | null;
+	} = {},
 ): Promise<ThumbImageMetaData> {
 	invariant(section.path, "section.path");
 	const fullPath = joinSectionPath(section.path, filePath);
-	const dimensions = await getImageDimensions(fullPath);
-	const gps = await extractGpsCoordinates(fullPath);
+	const sourceInput = options.sourceBuffer ?? fullPath;
+	const dimensions = await getImageDimensions(sourceInput);
+	const gps = await extractGpsCoordinates(sourceInput);
 	const location = geocodeGpsCoordinates(gps);
-	const existingMeta = await readStoredMetaForFile(section, filePath);
+	const existingMeta = options.existingMeta ?? (await readStoredMetaForFile(section, filePath));
 	const description = normalizeStoredDescription(existingMeta?.description);
+	const phashSourceBuffer = options.phashSourceBuffer ?? options.sourceBuffer;
 	const phash =
-		(await buildPerceptualHashFromFile(fullPath)) ?? normalizeStoredPhash(existingMeta?.phash);
+		(phashSourceBuffer ? await buildPerceptualHashFromBuffer(phashSourceBuffer) : null) ??
+		(await buildPerceptualHashFromFile(fullPath)) ??
+		normalizeStoredPhash(existingMeta?.phash);
 
 	return {
 		FileName: path.basename(fullPath),
 		MimeType: mime.lookup(fullPath),
-		FileSize: fs.statSync(fullPath).size,
+		FileSize: options.sourceBuffer?.length ?? fs.statSync(fullPath).size,
 		COMPUTED: {
 			Width: dimensions.width,
 			Height: dimensions.height,
@@ -283,9 +292,9 @@ export async function hasExifOrientationTransform(
 	}
 }
 
-async function getImageDimensions(fullPath: string) {
+async function getImageDimensions(input: string | Buffer) {
 	try {
-		const metadata = await sharp(fullPath).metadata();
+		const metadata = await sharp(input).metadata();
 		const width = metadata.width ?? fallbackDimensions.width;
 		const height = metadata.height ?? fallbackDimensions.height;
 		const orientation = metadata.orientation;
@@ -295,7 +304,7 @@ async function getImageDimensions(fullPath: string) {
 			height: shouldSwapSides ? width : height,
 		};
 	} catch {
-		const fileBuffer = fs.readFileSync(fullPath);
+		const fileBuffer = Buffer.isBuffer(input) ? input : fs.readFileSync(input);
 		const dimensions = sizeOf(fileBuffer);
 		const orientation = dimensions.orientation;
 		const shouldSwapSides = orientation !== undefined && orientation >= 5 && orientation <= 8;
@@ -328,9 +337,9 @@ export function buildBasicFileMetaData(
 	};
 }
 
-async function extractGpsCoordinates(fullPath: string): Promise<FileGpsCoordinates | null> {
+async function extractGpsCoordinates(input: string | Buffer): Promise<FileGpsCoordinates | null> {
 	try {
-		const gps = await exifr.gps(fullPath);
+		const gps = await exifr.gps(input);
 		if (!gps) {
 			return null;
 		}

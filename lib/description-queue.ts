@@ -9,6 +9,7 @@ import {
 
 let descriptionQueue: Queue | null = null;
 let descriptionQueueWarningWasShown = false;
+const jobRetryDelayMs = 60 * 60 * 1000;
 
 function warnDescriptionQueue(message: string, error: Error | null = null) {
 	if (descriptionQueueWarningWasShown) {
@@ -56,6 +57,10 @@ export async function getDescriptionQueue() {
 			prefix: descriptionQueuePrefix,
 			defaultJobOptions: {
 				attempts: 3,
+				backoff: {
+					type: "fixed",
+					delay: jobRetryDelayMs,
+				},
 				removeOnComplete: 1000,
 				removeOnFail: 1000,
 			},

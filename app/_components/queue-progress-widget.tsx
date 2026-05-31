@@ -1,10 +1,14 @@
 "use client";
 
 import { useRef } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import type { QueueProgressResponse } from "./ui-types";
 import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
+
+const cardClassName =
+	"block rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 transition hover:border-sky-300/30 hover:bg-slate-950/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/50 lg:w-[19rem] lg:shrink-0";
 
 export function QueueProgressWidget() {
 	const { data, error, isLoading, mutate } = useSWR<QueueProgressResponse>("/api/queue-info", fetcher, {
@@ -18,37 +22,36 @@ export function QueueProgressWidget() {
 
 	if (error && !data) {
 		return (
-			<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-[19rem] lg:shrink-0">
+			<Link href="/queues" className={cardClassName}>
 				<div className="text-xs uppercase tracking-[0.2em] text-slate-400">Queue progress</div>
 				<div className="mt-3">
 					<ErrorState
 						message="Failed to load queue progress."
 						error={error}
 						details={getErrorMessage(error)}
-						onRetry={() => mutate()}
 					/>
 				</div>
-			</div>
+			</Link>
 		);
 	}
 
 	if (isLoading && !data) {
 		return (
-			<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-[19rem] lg:shrink-0">
+			<Link href="/queues" className={cardClassName}>
 				<div className="text-xs uppercase tracking-[0.2em] text-slate-400">Queue progress</div>
 				<div className="mt-3 text-sm text-slate-300">
 					<Loading />
 				</div>
-			</div>
+			</Link>
 		);
 	}
 
 	if (!data?.queue.configured) {
 		return (
-			<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-[19rem] lg:shrink-0">
+			<Link href="/queues" className={cardClassName}>
 				<div className="text-xs uppercase tracking-[0.2em] text-slate-400">Queue progress</div>
 				<div className="mt-2 text-sm font-medium text-slate-300">Queue disabled</div>
-			</div>
+			</Link>
 		);
 	}
 
@@ -74,7 +77,7 @@ export function QueueProgressWidget() {
 	const percentDone = totalObserved > 0 ? Math.min(100, (processed / totalObserved) * 100) : 100;
 
 	return (
-		<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-[19rem] lg:shrink-0">
+		<Link href="/queues" className={cardClassName}>
 			<div className="flex items-center justify-between gap-3">
 				<div className="text-xs uppercase tracking-[0.2em] text-slate-400">Queue progress</div>
 				<div className="text-xs font-medium text-sky-100">{percentDone.toFixed(1)}%</div>
@@ -91,16 +94,18 @@ export function QueueProgressWidget() {
 					{processed}/{totalObserved || processed}
 				</div>
 			</div>
+			<div className="mt-3 text-xs font-medium uppercase tracking-[0.18em] text-sky-100/80">
+				View queue details
+			</div>
 			{error ? (
 				<div className="mt-3">
 					<ErrorState
 						message="Showing the last queue snapshot."
 						error={error}
 						details={getErrorMessage(error) ?? "Refresh failed."}
-						onRetry={() => mutate()}
 					/>
 				</div>
 			) : null}
-		</div>
+		</Link>
 	);
 }

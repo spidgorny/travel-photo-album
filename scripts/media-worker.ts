@@ -6,6 +6,7 @@ import { closeRedisClient } from "../lib/cache.ts";
 import {
 	getMediaQueueConnection,
 	getWorkerConcurrency,
+	getWorkerLockDurationMs,
 	mediaQueueName,
 	mediaQueuePrefix,
 	processMediaJob,
@@ -20,6 +21,7 @@ const queue = new Queue(mediaQueueName, {
 const workerStartedAt = Date.now();
 let processedThisRun = 0;
 let totalObserved = 0;
+const stepAverages = new Map();
 
 const worker = new Worker(
 	mediaQueueName,
@@ -27,6 +29,8 @@ const worker = new Worker(
 	{
 		connection: getMediaQueueConnection(),
 		concurrency: getWorkerConcurrency(),
+		lockDuration: getWorkerLockDurationMs(),
+		lockRenewTime: Math.max(Math.floor(getWorkerLockDurationMs() / 3), 15_000),
 		prefix: mediaQueuePrefix,
 	},
 );
@@ -73,9 +77,72 @@ function formatJobFilePath(filePath) {
 	return typeof filePath === "string" && filePath.length > 0 ? filePath : "unknown";
 }
 
+function formatDuration(durationMs) {
+	if (!Number.isFinite(durationMs) || durationMs < 0) {
+		return "--";
+	}
+	if (durationMs < 1000) {
+		return `${Math.round(durationMs)}ms`;
+	}
+	if (durationMs < 60_000) {
+		return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
+	}
+	return formatEta(durationMs / 1000);
+}
+
+function getStepMarker(step) {
+	if (step?.status === "done") {
+		return "[x]";
+	}
+	if (step?.status === "failed") {
+		return "[!]";
+	}
+	return "[ ]";
+}
+
+function trackAverageDuration(step) {
+	if (step?.status !== "done" || !Number.isFinite(step?.durationMs)) {
+		return null;
+	}
+	const stats = stepAverages.get(step.label) ?? { totalMs: 0, count: 0 };
+	stats.totalMs += step.durationMs;
+	stats.count += 1;
+	stepAverages.set(step.label, stats);
+	return stats.totalMs / stats.count;
+}
+
+function logPipeline(result) {
+	const steps = Array.isArray(result?.pipeline?.steps) ? result.pipeline.steps : [];
+	if (!steps.length) {
+		return;
+	}
+
+	const labelWidth = Math.max(
+		4,
+		...steps.map((step) => String(step?.label ?? "step").length),
+	);
+	console.log(`  step${" ".repeat(Math.max(labelWidth - 4, 0))}\tthis\tavg`);
+	for (const step of steps) {
+		const marker = getStepMarker(step);
+		const durationText =
+			step?.status === "done"
+				? formatDuration(step.durationMs)
+				: step?.status === "failed"
+					? `${formatDuration(step.durationMs)} failed`
+					: step?.detail || "skipped";
+		const averageDuration = trackAverageDuration(step);
+		const averageText = averageDuration == null ? "--" : formatDuration(averageDuration);
+		const detailSuffix =
+			step?.detail && step?.status === "done" ? `  ${step.detail}` : "";
+		console.log(
+			`  ${marker} ${String(step?.label ?? "step").padEnd(labelWidth)}\t${durationText}\t${averageText}${detailSuffix}`,
+		);
+	}
+}
+
 worker.on("ready", () => {
 	console.log(
-		`BullMQ worker ready on queue ${mediaQueuePrefix}:${mediaQueueName} (concurrency ${getWorkerConcurrency()})`,
+		`BullMQ worker ready on queue ${mediaQueuePrefix}:${mediaQueueName} (concurrency ${getWorkerConcurrency()}, lock ${formatDuration(getWorkerLockDurationMs())})`,
 	);
 	void logQueueDepth().catch((error) => {
 		console.error(`queue depth failed ${error.message}`);
@@ -84,7 +151,8 @@ worker.on("ready", () => {
 
 worker.on("completed", (job, result) => {
 	const filePath = formatJobFilePath(result?.filePath || job?.data?.filePath);
-	console.log(`completed ${job?.id ?? "unknown"} ${filePath}`);
+	console.log(`${filePath}`);
+	logPipeline(result);
 	processedThisRun += 1;
 	void logQueueDepth().catch((error) => {
 		console.error(`queue depth failed ${error.message}`);

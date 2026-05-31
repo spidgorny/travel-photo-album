@@ -9,6 +9,7 @@ import {
 
 let thumbQueue: Queue | null = null;
 let thumbQueueWarningWasShown = false;
+const jobRetryDelayMs = 60 * 60 * 1000;
 
 function warnThumbQueue(message: string, error: Error | null = null) {
 	if (thumbQueueWarningWasShown) {
@@ -54,6 +55,10 @@ export async function getThumbQueue() {
 			prefix: thumbQueuePrefix,
 			defaultJobOptions: {
 				attempts: 3,
+				backoff: {
+					type: "fixed",
+					delay: jobRetryDelayMs,
+				},
 				removeOnComplete: 1000,
 				removeOnFail: 1000,
 			},
