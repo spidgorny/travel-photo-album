@@ -14,9 +14,10 @@ import {
 import type {
 	DailyLocationSummary,
 	DatedFileEntry,
+	FileEntryWithOptionalDate,
 	StoredDirectoryMetaEntry,
 } from "../../../../lib/files-types";
-import { formatDayKey, getFileDates } from "../../../../lib/files";
+import { formatDayKey, getFilesWithOptionalDates } from "../../../../lib/files";
 import {
 	filterFilesBySearchQuery,
 	normalizeSearchQuery,
@@ -25,6 +26,7 @@ import {
 interface DatesSuccessResponse {
 	sectionId: number;
 	dates: Record<string, { count: number; locations: string[] }>;
+	undated?: { count: number; locations: string[] };
 	locationsByDate: Record<string, DailyLocationSummary[]>;
 	pagination: {
 		page: number;
@@ -70,13 +72,15 @@ export async function GET(request: Request, { params }: RouteContext) {
 		invariant(section, "section");
 		const indexedSection = { ...section, id: sectionId };
 		const searchQuery = normalizeSearchQuery(url.searchParams.get("q"));
-		let files = (await getFileDates(indexedSection, filePath)) as DatedFileEntry[];
+		let files = (await getFilesWithOptionalDates(indexedSection, filePath)) as FileEntryWithOptionalDate[];
 
 		files = files.filter((file) => !file.isDir);
 		if (searchQuery) {
 			files = await filterFilesBySearchQuery(indexedSection, files, searchQuery);
 		}
-		const dateBuckets = groupFilesByDate(files);
+		const datedFiles = files.filter((file): file is DatedFileEntry => Boolean(file.date));
+		const undatedFiles = files.filter((file) => !file.date);
+		const dateBuckets = groupFilesByDate(datedFiles);
 		const dateBucketByKey = new Map(dateBuckets.map((dateBucket) => [dateBucket.dateKey, dateBucket]));
 		const pages = paginateDateBuckets(dateBuckets);
 		const totalPages = Math.max(pages.length, 1);
@@ -105,13 +109,14 @@ export async function GET(request: Request, { params }: RouteContext) {
 			{
 				sectionId,
 				dates,
+				undated: undatedFiles.length ? { count: undatedFiles.length, locations: [] } : undefined,
 				locationsByDate: sortedLocationsByDate,
 				pagination: {
 					page,
 					totalPages,
 					totalFiles: files.length,
 					totalDays: dateBuckets.length,
-					pageFiles: selectedPage.fileCount,
+					pageFiles: selectedPage.fileCount + undatedFiles.length,
 					pageDays: selectedPage.dateKeys.length,
 					perPageFileLimit: galleryPageFileLimit,
 					hasPreviousPage: page > 1,

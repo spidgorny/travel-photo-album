@@ -85,8 +85,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
 		invariant(section, "section");
 		const numericSectionId = Number(sectionId);
 		const metaSearchKeys = getStoredMetaDirectoryKeys(section, filePath);
+		const storedMeta = await readStoredMetaForFile(section, filePath);
 
-		let metaData: MetaData | null = await getMetaByJson(section, filePath);
+		let metaData: MetaData | null = getMetaByJson(storedMeta);
 		if (!metaData) {
 			metaData = await getMetaByFile(numericSectionId, section, filePath);
 		}
@@ -95,6 +96,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 			{
 				...metaData,
 				metaSearchKeys,
+				storedMeta,
 			},
 			{
 			headers: {
@@ -154,13 +156,6 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 	}
 }
 
-async function getMetaByJson(
-	section: ConfigSection,
-	filePath: string[],
-): Promise<JsonMetaData | null> {
-	return readMetaFromStorage(section, filePath);
-}
-
 async function getMetaByFile(
 	sectionId: number,
 	section: ConfigSection,
@@ -187,11 +182,7 @@ async function getMetaByFile(
 	return metaData as FileMetaData;
 }
 
-async function readMetaFromStorage(
-	section: ConfigSection,
-	filePath: string[],
-): Promise<JsonMetaData | null> {
-	const fileMeta = await readStoredMetaForFile(section, filePath);
+function getMetaByJson(fileMeta: StoredDirectoryMetaEntry | null): JsonMetaData | null {
 	if (!fileMeta?.COMPUTED?.Width || !fileMeta?.COMPUTED?.Height) {
 		return null;
 	}

@@ -198,6 +198,28 @@ export function normalizeStoredPhash(value: unknown): string | undefined {
 	return /^[0-9a-f]{16}$/.test(normalized) ? normalized : undefined;
 }
 
+export function normalizeStoredGps(value: unknown): FileGpsCoordinates | undefined {
+	if (!value || typeof value !== "object") {
+		return undefined;
+	}
+	const candidate = value as Partial<FileGpsCoordinates>;
+	const latitude = normalizeCoordinate(candidate.latitude);
+	const longitude = normalizeCoordinate(candidate.longitude);
+	if (latitude === null || longitude === null) {
+		return undefined;
+	}
+	return { latitude, longitude };
+}
+
+export function geocodeGpsCoordinates(
+	gps: FileGpsCoordinates | null | undefined,
+): FileLocationLabel | undefined {
+	if (!gps) {
+		return undefined;
+	}
+	return reverseGeocodeLocation(gps) ?? undefined;
+}
+
 export async function updateStoredDescriptionForFile(
 	section: ConfigSection,
 	filePath: string[],
@@ -225,7 +247,7 @@ export async function buildImageMetaData(
 	const fullPath = joinSectionPath(section.path, filePath);
 	const dimensions = await getImageDimensions(fullPath);
 	const gps = await extractGpsCoordinates(fullPath);
-	const location = gps ? reverseGeocodeLocation(gps) : null;
+	const location = geocodeGpsCoordinates(gps);
 	const existingMeta = await readStoredMetaForFile(section, filePath);
 	const description = normalizeStoredDescription(existingMeta?.description);
 	const phash = (await buildPerceptualHash(fullPath)) ?? normalizeStoredPhash(existingMeta?.phash);

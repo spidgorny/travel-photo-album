@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "index:geolocation": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/index-geolocation.ts",
     "index:search": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/index-search.ts",
     "warmup:thumbs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/warmup-thumbnails.ts",
     "descriptions:list": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/list-descriptions.ts",

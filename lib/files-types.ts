@@ -10,6 +10,12 @@ export interface DatedFileEntry extends FilteredFileEntry {
 	date: Date;
 }
 
+export interface FileEntryWithOptionalDate extends FilteredFileEntry {
+	dirPath: string;
+	fullPath: string;
+	date: Date | null;
+}
+
 export interface FileGpsCoordinates {
 	latitude: number;
 	longitude: number;

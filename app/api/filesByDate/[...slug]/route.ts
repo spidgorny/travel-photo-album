@@ -4,8 +4,11 @@ import invariant from "tiny-invariant";
 import config from "../../../../lib/config";
 import { isValidDate } from "../../../../lib/date";
 import { normalizeStoredPhash, readStoredMetaForFile } from "../../../../lib/file-meta";
-import { formatDayKey, getFileDates, parseDayKey } from "../../../../lib/files";
+import { formatDayKey, getFilesWithOptionalDates, parseDayKey } from "../../../../lib/files";
 import { getImageDimensions } from "../../../../lib/thumb-store";
+import type { DatedFileEntry, FileEntryWithOptionalDate } from "../../../../lib/files-types";
+
+const UNDATED_BUCKET = "undated";
 
 interface RouteContext {
 	params: Promise<{
@@ -24,14 +27,19 @@ export async function GET(request: Request, { params }: RouteContext) {
 		invariant(section, "section");
 		invariant(dateInput, "date missing");
 
-		const date = new Date(dateInput);
-		invariant(isValidDate(date), "date missing");
-		const dayKey = parseDayKey(dateInput);
-		invariant(dayKey, "date missing");
 		const searchQuery = normalizeSearchQuery(url.searchParams.get("q"));
+		const isUndatedBucket = dateInput === UNDATED_BUCKET;
+		const dayKey = isUndatedBucket ? null : parseDayKey(dateInput);
+		if (!isUndatedBucket) {
+			const date = new Date(dateInput);
+			invariant(isValidDate(date), "date missing");
+			invariant(dayKey, "date missing");
+		}
 
-		let files = await getFileDates(section, filePathWithDate);
-		files = files.filter((file) => file.date && formatDayKey(file.date) === dayKey);
+		let files = await getFilesWithOptionalDates(section, filePathWithDate);
+		files = files.filter((file) =>
+			isUndatedBucket ? !file.date : Boolean(file.date && formatDayKey(file.date) === dayKey),
+		);
 		files = files.filter((file) => !file.isDir);
 		let responseFiles = await Promise.all(
 			files.map(async (file) => {

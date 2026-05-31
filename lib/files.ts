@@ -5,7 +5,11 @@ import fs from "fs";
 import { magicCache } from "./cache.ts";
 import invariant from "tiny-invariant";
 import type { ConfigSection } from "./config.ts";
-import type { DatedFileEntry, FilteredFileEntry } from "./files-types.ts";
+import type {
+	DatedFileEntry,
+	FileEntryWithOptionalDate,
+	FilteredFileEntry,
+} from "./files-types.ts";
 
 export function joinSectionPath(
 	sectionPath: string,
@@ -75,21 +79,28 @@ export async function getFileDates(
 	section: ConfigSection,
 	imagePath: string[] = [],
 ): Promise<DatedFileEntry[]> {
+	const files = await getFilesWithOptionalDates(section, imagePath);
+	return files.filter((x): x is DatedFileEntry => Boolean(x.date));
+}
+
+export async function getFilesWithOptionalDates(
+	section: ConfigSection,
+	imagePath: string[] = [],
+): Promise<FileEntryWithOptionalDate[]> {
 	return magicCache(
-		"getFileDates",
+		"getFilesWithOptionalDates",
 		async () => {
 			let files = await getFilteredFiles(section, imagePath);
-			// console.log(files);
 
 			files = files.map((x) => ({
 				...x,
 				dirPath: path.join(...imagePath, x.path),
-				fullPath: path.join(section.path, x.path),
-				date: getFileDate(path.join(section.path, x.path), x.ctime),
+				fullPath: joinSectionPath(section.path, [...imagePath, x.path]),
+				date: getFileDate(
+					joinSectionPath(section.path, [...imagePath, x.path]),
+					x.stats instanceof fs.Stats ? x.stats.ctime : null,
+				),
 			}));
-
-			files = files.filter((x) => x.date);
-			// console.log(files);
 
 			return files;
 		},

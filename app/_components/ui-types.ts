@@ -31,6 +31,7 @@ export interface FilesApiEntry {
 export interface DatesResponse {
 	sectionId?: number;
 	dates?: Record<string, number | DaySummary>;
+	undated?: number | DaySummary;
 	locationsByDate?: Record<string, DailyLocationSummary[]>;
 	pagination?: DatesPagination;
 }
@@ -77,6 +78,7 @@ export interface MetaResponse {
 	description?: string | null;
 	metaSearchKeys?: string[];
 	phash?: string;
+	storedMeta?: Record<string, unknown> | null;
 	[key: string]: unknown;
 }
 

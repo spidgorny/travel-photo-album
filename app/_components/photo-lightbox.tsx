@@ -2,7 +2,14 @@
 
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type ReactNode, type WheelEvent } from "react";
+import { PhashBitmap } from "./phash-bitmap";
 import type { GalleryPhoto } from "./ui-types";
+
+interface LightboxSidebarProps {
+	buttonLabel: string;
+	title: string;
+	content: ReactNode;
+}
 
 interface PhotoLightboxProps {
 	photos: GalleryPhoto[];
@@ -12,6 +19,7 @@ interface PhotoLightboxProps {
 	onPrevious: () => void;
 	onNext: () => void;
 	footer?: ReactNode;
+	sidebar?: LightboxSidebarProps | null;
 }
 
 export function PhotoLightbox({
@@ -22,9 +30,17 @@ export function PhotoLightbox({
 	onPrevious,
 	onNext,
 	footer,
+	sidebar,
 }: PhotoLightboxProps) {
 	const currentPhoto = photos[currentIndex] ?? null;
 	const lastWheelNavigationAt = useRef(0);
+	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+	useEffect(() => {
+		if (!isOpen) {
+			setIsSidebarOpen(false);
+		}
+	}, [isOpen]);
 
 	const handleViewerWheel = useCallback(
 		(event: WheelEvent<HTMLDivElement>) => {
@@ -94,7 +110,7 @@ export function PhotoLightbox({
 				aria-modal="true"
 				aria-label={currentPhoto.caption ?? "Photo viewer"}
 			>
-				<div className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5">
+				<div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
 					<div className="min-w-0">
 						<div className="truncate text-sm font-medium text-white">
 							{currentPhoto.caption ?? "Photo"}
@@ -103,13 +119,24 @@ export function PhotoLightbox({
 							{currentIndex + 1} / {photos.length}
 						</div>
 					</div>
-					<button
-						type="button"
-						onClick={onClose}
-						className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
-					>
-						Close
-					</button>
+					<div className="flex items-center gap-2">
+						{sidebar ? (
+							<button
+								type="button"
+								onClick={() => setIsSidebarOpen((open) => !open)}
+								className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition hover:border-sky-300/40 hover:bg-sky-300/10 hover:text-white"
+							>
+								{isSidebarOpen ? `Hide ${sidebar.buttonLabel}` : sidebar.buttonLabel}
+							</button>
+						) : null}
+						<button
+							type="button"
+							onClick={onClose}
+							className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
+						>
+							Close
+						</button>
+					</div>
 				</div>
 				<div
 					className="relative flex min-h-0 flex-1 items-center justify-center bg-slate-950/80 p-2 sm:p-3"
@@ -136,12 +163,157 @@ export function PhotoLightbox({
 							Next
 						</button>
 					) : null}
+					{sidebar && isSidebarOpen ? (
+						<aside className="absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-white/10 bg-slate-950/95 shadow-2xl shadow-black/40">
+							<div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+								<div className="text-sm font-medium text-white">{sidebar.title}</div>
+								<button
+									type="button"
+									onClick={() => setIsSidebarOpen(false)}
+									className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
+								>
+									Close
+								</button>
+							</div>
+							<div className="min-h-0 flex-1 overflow-y-auto p-4">{sidebar.content}</div>
+						</aside>
+					) : null}
 				</div>
 				{footer ? <div className="border-t border-white/10 px-4 py-3 sm:px-5">{footer}</div> : null}
 			</div>
 		</div>,
 		document.body,
 	);
+}
+
+interface MetadataSidebarProps {
+	metadata?: Record<string, unknown> | null;
+	isLoading?: boolean;
+	errorMessage?: string;
+}
+
+interface MetadataRow {
+	key: string;
+	value: string;
+}
+
+export function MetadataSidebar({
+	metadata,
+	isLoading = false,
+	errorMessage,
+}: MetadataSidebarProps) {
+	const rows = flattenMetadata(metadata);
+
+	if (errorMessage) {
+		return <div className="text-sm text-red-300">{errorMessage}</div>;
+	}
+
+	if (isLoading) {
+		return <div className="text-sm text-slate-300">Loading metadata...</div>;
+	}
+
+	if (!rows.length) {
+		return (
+			<div className="text-sm text-slate-400">
+				No stored metadata is available for this image yet.
+			</div>
+		);
+	}
+
+	return (
+		<div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60">
+			<table className="min-w-full border-collapse text-left text-sm">
+				<thead className="bg-white/[0.04] text-xs uppercase tracking-[0.18em] text-slate-400">
+					<tr>
+						<th className="w-[42%] px-3 py-2 font-medium">Field</th>
+						<th className="px-3 py-2 font-medium">Value</th>
+					</tr>
+				</thead>
+				<tbody>
+					{rows.map((row) => (
+						<tr key={row.key} className="border-t border-white/10 align-top">
+							<th className="px-3 py-2 font-medium text-slate-300">{row.key}</th>
+							<td className="px-3 py-2 whitespace-pre-wrap break-all text-slate-100">
+								{row.value}
+							</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
+	);
+}
+
+function flattenMetadata(metadata: Record<string, unknown> | null | undefined) {
+	if (!metadata || typeof metadata !== "object") {
+		return [] as MetadataRow[];
+	}
+
+	const rows: MetadataRow[] = [];
+	appendMetadataRows(rows, metadata);
+	return rows;
+}
+
+function appendMetadataRows(
+	rows: MetadataRow[],
+	value: Record<string, unknown> | unknown[],
+	path = "",
+) {
+	if (Array.isArray(value)) {
+		if (!value.length && path) {
+			rows.push({ key: path, value: "[]" });
+			return;
+		}
+		value.forEach((entry, index) => {
+			appendUnknownValue(rows, entry, `${path}[${index}]`);
+		});
+		return;
+	}
+
+	const entries = Object.entries(value);
+	if (!entries.length && path) {
+		rows.push({ key: path, value: "{}" });
+		return;
+	}
+
+	entries.forEach(([entryKey, entryValue]) => {
+		const nextPath = path ? `${path}.${entryKey}` : entryKey;
+		appendUnknownValue(rows, entryValue, nextPath);
+	});
+}
+
+function appendUnknownValue(rows: MetadataRow[], value: unknown, path: string) {
+	if (Array.isArray(value)) {
+		appendMetadataRows(rows, value, path);
+		return;
+	}
+
+	if (value && typeof value === "object") {
+		appendMetadataRows(rows, value as Record<string, unknown>, path);
+		return;
+	}
+
+	rows.push({ key: path, value: formatMetadataValue(value) });
+}
+
+function formatMetadataValue(value: unknown) {
+	if (value === null) {
+		return "null";
+	}
+
+	if (value === undefined) {
+		return "undefined";
+	}
+
+	if (typeof value === "string") {
+		return value;
+	}
+
+	if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+		return String(value);
+	}
+
+	return JSON.stringify(value);
 }
 
 function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
@@ -164,6 +336,7 @@ function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
 			className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-2xl"
 			style={{ backgroundColor: photo.dominantColor ?? "#020617" }}
 		>
+			<PhashBitmap value={photo.phash} className="absolute right-3 top-3 z-10" />
 			{originalStatus !== "loaded" ? (
 				<div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 bg-slate-800/80">
 					<div

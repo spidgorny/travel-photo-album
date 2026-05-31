@@ -41,12 +41,14 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 			...normalizeDaySummary(summary),
 		}))
 		.sort(({ date: firstDate }, { date: secondDate }) => secondDate.localeCompare(firstDate));
+	const undated = normalizeDaySummary(data.undated);
+	const jumpLabelMode = getJumpLabelMode(dates.map(({ date }) => date));
 	const pagination = data.pagination ?? {
 		page: 1,
 		totalPages: 1,
-		totalFiles: dates.reduce((total, day) => total + day.count, 0),
+		totalFiles: dates.reduce((total, day) => total + day.count, 0) + undated.count,
 		totalDays: dates.length,
-		pageFiles: dates.reduce((total, day) => total + day.count, 0),
+		pageFiles: dates.reduce((total, day) => total + day.count, 0) + undated.count,
 		pageDays: dates.length,
 		perPageFileLimit: 1000,
 		hasPreviousPage: false,
@@ -54,7 +56,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 	};
 	const isSSR = typeof window === "undefined";
 
-	if (!dates.length) {
+	if (!dates.length && !undated.count) {
 		return (
 			<div className="flex min-h-[16rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-900/40 px-6 text-center text-sm text-slate-400">
 				No dated photos were found in this folder yet.
@@ -63,7 +65,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 	}
 
 	return (
-		<div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_7rem]">
+		<div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_5.5rem]">
 			<FolderInfoSidebar
 				isOpen={isFolderInfoOpen}
 				onClose={() => setIsFolderInfoOpen(false)}
@@ -94,7 +96,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 					<div className="text-sm text-slate-400">
 						{pagination.totalPages > 1
 							? `${pagination.pageDays} day${pagination.pageDays === 1 ? "" : "s"} on this page`
-							: `${dates.length} day${dates.length === 1 ? "" : "s"}`}
+							: `${dates.length} day${dates.length === 1 ? "" : "s"}${undated.count ? " + undated" : ""}`}
 					</div>
 				</div>
 				{pagination.totalPages > 1 ? (
@@ -154,6 +156,29 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 						</section>
 					);
 				})}
+				{undated.count ? (
+					<section
+						id={buildDayAnchorId(UNDATED_BUCKET)}
+						key={UNDATED_BUCKET}
+						className="scroll-mt-6 rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-4 shadow-lg shadow-black/20"
+					>
+						<div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<h3 className="text-xl font-semibold text-white">Undated photos</h3>
+								<p className="text-sm text-slate-400">
+									{undated.count} photo{undated.count === 1 ? "" : "s"}
+								</p>
+							</div>
+						</div>
+						{!isSSR && (
+							<GalleryOneDay
+								sectionId={section.id}
+								folder={folder}
+								date={UNDATED_BUCKET}
+							/>
+						)}
+					</section>
+				) : null}
 				{pagination.totalPages > 1 ? (
 					<GalleryPagination
 						currentPage={pagination.page}
@@ -168,24 +193,36 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 			</div>
 
 			<aside className="hidden self-start xl:sticky xl:top-5 xl:block">
-				<div className="max-h-[calc(100vh-2.5rem)] overflow-y-auto rounded-[1.5rem] border border-white/10 bg-slate-950/55 p-3 shadow-xl shadow-black/20">
-					<div className="px-2 pb-3">
+				<div className="max-h-[calc(100vh-2.5rem)] overflow-y-auto rounded-[1.25rem] border border-white/10 bg-slate-950/55 p-2 shadow-xl shadow-black/20">
+					<div className="px-1.5 pb-2">
 						<div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
 							Days
 						</div>
-						<div className="mt-2 text-sm text-slate-500">Jump to a date</div>
+						<div className="mt-1 text-xs text-slate-500">Jump to a date</div>
 					</div>
-					<nav aria-label="Jump to day" className="space-y-2">
+					<nav aria-label="Jump to day" className="space-y-1.5">
 						{dates.map(({ date, count }) => (
 							<a
 								key={`jump:${date}`}
 								href={`#${buildDayAnchorId(date)}`}
-								className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-sky-300/30 hover:bg-sky-300/10 hover:text-white"
+								className="flex items-center justify-between gap-1 rounded-xl border border-white/8 bg-white/[0.03] px-2 py-1.5 text-xs text-slate-300 transition hover:border-sky-300/30 hover:bg-sky-300/10 hover:text-white"
 							>
-								<span className="font-medium">{formatDateJumpLabel(date)}</span>
-								<span className="text-xs text-slate-500">{count}</span>
+								<span className="font-medium leading-tight">
+									{formatDateJumpLabel(date, jumpLabelMode)}
+								</span>
+								<span className="text-[11px] text-slate-500">{count}</span>
 							</a>
 						))}
+						{undated.count ? (
+							<a
+								key="jump:undated"
+								href={`#${buildDayAnchorId(UNDATED_BUCKET)}`}
+								className="flex items-center justify-between gap-1 rounded-xl border border-white/8 bg-white/[0.03] px-2 py-1.5 text-xs text-slate-300 transition hover:border-sky-300/30 hover:bg-sky-300/10 hover:text-white"
+							>
+								<span className="font-medium leading-tight">Undated</span>
+								<span className="text-[11px] text-slate-500">{undated.count}</span>
+							</a>
+						) : null}
 					</nav>
 				</div>
 			</aside>
@@ -195,6 +232,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 
 const MAX_LOCATION_LABELS = 3;
 const VISIBLE_PAGINATION_RADIUS = 1;
+const UNDATED_BUCKET = "undated";
 
 interface GalleryPaginationProps {
 	currentPage: number;
@@ -286,18 +324,59 @@ function normalizeDaySummary(summary: number | DaySummary | undefined) {
 	};
 }
 
-function formatDateJumpLabel(date: string) {
-	const compactMatch = date.match(/^\d{4}\d{2}(\d{2})$/);
-	if (compactMatch) {
-		return String(Number(compactMatch[1]));
+function formatDateJumpLabel(date: string, mode: "day" | "month-day" | "month-day-year") {
+	const parsedDate = parseJumpDate(date);
+	if (!parsedDate) {
+		return date;
 	}
 
-	const isoMatch = date.match(/^\d{4}-\d{2}-(\d{2})$/);
+	if (mode === "day") {
+		return String(parsedDate.getDate());
+	}
+
+	if (mode === "month-day-year") {
+		return new Intl.DateTimeFormat("en", {
+			month: "short",
+			day: "numeric",
+			year: "2-digit",
+		}).format(parsedDate);
+	}
+
+	return new Intl.DateTimeFormat("en", {
+		month: "short",
+		day: "numeric",
+	}).format(parsedDate);
+}
+
+function getJumpLabelMode(dates: string[]) {
+	const parsedDates = dates.map(parseJumpDate).filter((date): date is Date => Boolean(date));
+	if (!parsedDates.length) {
+		return "day" as const;
+	}
+
+	const uniqueMonths = new Set(
+		parsedDates.map((date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`),
+	);
+	if (uniqueMonths.size <= 1) {
+		return "day" as const;
+	}
+
+	const uniqueYears = new Set(parsedDates.map((date) => date.getFullYear()));
+	return uniqueYears.size > 1 ? "month-day-year" : ("month-day" as const);
+}
+
+function parseJumpDate(date: string) {
+	const isoMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 	if (isoMatch) {
-		return String(Number(isoMatch[1]));
+		return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
 	}
 
-	return date;
+	const compactMatch = date.match(/^(\d{4})(\d{2})(\d{2})$/);
+	if (compactMatch) {
+		return new Date(Number(compactMatch[1]), Number(compactMatch[2]) - 1, Number(compactMatch[3]));
+	}
+
+	return null;
 }
 
 function normalizePageNumber(pageInput: string | null) {

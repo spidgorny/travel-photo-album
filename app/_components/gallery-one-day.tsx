@@ -6,7 +6,7 @@ import Gallery from "react-photo-gallery";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import { PhashBitmap } from "./phash-bitmap";
-import { PhotoLightbox } from "./photo-lightbox";
+import { MetadataSidebar, PhotoLightbox } from "./photo-lightbox";
 import type { FilesResponse, GalleryPhoto, MetaResponse } from "./ui-types";
 import { buildApiPath } from "./url-paths";
 import { Loading } from "./widget/loading";
@@ -169,12 +169,19 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 		viewerIsOpen && currentPhoto
 			? buildApiPath("/api/meta", sectionId, folder, currentPhoto.path)
 			: null;
-	const { data: currentMeta } = useSWR<MetaResponse>(currentMetaUrl, fetcher, {
+	const {
+		data: currentMeta,
+		error: currentMetaError,
+	} = useSWR<MetaResponse>(currentMetaUrl, fetcher, {
 		revalidateOnFocus: false,
 	});
 	const currentMetaDescription =
 		typeof currentMeta?.description === "string" ? currentMeta.description : undefined;
 	const currentMetaPhash = typeof currentMeta?.phash === "string" ? currentMeta.phash : undefined;
+	const currentStoredMeta =
+		currentMeta?.storedMeta && typeof currentMeta.storedMeta === "object"
+			? currentMeta.storedMeta
+			: null;
 
 	useEffect(() => {
 		if (!currentPhoto || currentMetaDescription === currentPhoto.description) {
@@ -243,6 +250,27 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 				onClose={closeLightbox}
 				onPrevious={showPreviousImage}
 				onNext={showNextImage}
+				sidebar={
+					currentPhoto
+						? {
+								buttonLabel: "EXIF",
+								title: currentPhoto.caption
+									? `${currentPhoto.caption} metadata`
+									: "Stored metadata",
+								content: (
+									<MetadataSidebar
+										metadata={currentStoredMeta}
+										isLoading={Boolean(currentMetaUrl) && !currentMeta && !currentMetaError}
+										errorMessage={
+											currentMetaError instanceof Error
+												? currentMetaError.message
+												: undefined
+										}
+									/>
+								),
+							}
+						: null
+				}
 				footer={
 					currentPhoto ? (
 						<DescriptionEditor
