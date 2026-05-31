@@ -49,7 +49,6 @@ type PhotoGalleryComponentProps = {
 };
 
 const PhotoGallery = Gallery as unknown as ComponentType<PhotoGalleryComponentProps>;
-const MAX_SIMILAR_LOOKBACK = 3;
 const MAX_PHASH_DISTANCE = 28;
 
 export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
@@ -103,10 +102,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 	}, [data, folder, sectionId]);
 
 	const [dimensions, setDimensions] = useState<GalleryPhoto[]>(photos);
-	const groupedPhotos = useMemo(
-		() => groupSequentialSimilarPhotos(dimensions),
-		[dimensions],
-	);
+	const groupedPhotos = useMemo(() => groupSimilarPhotosForDay(dimensions), [dimensions]);
 	const lightboxPhotos = useMemo(() => {
 		if (!lightboxPhotoKeys.length) {
 			return dimensions;
@@ -297,63 +293,69 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 	);
 }
 
-function groupSequentialSimilarPhotos(photos: GalleryPhoto[]): GroupedGalleryPhoto[] {
+function groupSimilarPhotosForDay(photos: GalleryPhoto[]): GroupedGalleryPhoto[] {
 	if (!photos.length) {
 		return [];
 	}
 
-	const groups: {
-		representative: GalleryPhoto;
-		members: GalleryPhoto[];
-		memberIndices: number[];
-		startIndex: number;
-	}[] = [];
+	const normalizedHashes = photos.map((photo) => normalizePhash(photo.phash));
+	const parents = photos.map((_photo, index) => index);
 
-	photos.forEach((photo, index) => {
-		const currentGroup = groups.at(-1);
-		if (!currentGroup) {
-			groups.push({
-				representative: photo,
-				members: [photo],
-				memberIndices: [index],
-				startIndex: index,
-			});
-			return;
+	function find(index: number): number {
+		if (parents[index] === index) {
+			return index;
 		}
-
-		if (shouldGroupWithPreviousPhotos(currentGroup.members, photo)) {
-			currentGroup.members.push(photo);
-			currentGroup.memberIndices.push(index);
-			return;
-		}
-
-		groups.push({
-			representative: photo,
-			members: [photo],
-			memberIndices: [index],
-			startIndex: index,
-		});
-	});
-
-	return groups.map(({ representative, members, memberIndices, startIndex }) => ({
-		...representative,
-		lightboxIndex: startIndex,
-		groupedPhotoCount: members.length,
-		groupMemberIndices: memberIndices,
-	}));
-}
-
-function shouldGroupWithPreviousPhotos(previousPhotos: GalleryPhoto[], currentPhoto: GalleryPhoto) {
-	const currentHash = normalizePhash(currentPhoto.phash);
-	if (!currentHash) {
-		return false;
+		parents[index] = find(parents[index]);
+		return parents[index];
 	}
 
-	const nearbyPhotos = previousPhotos.slice(-MAX_SIMILAR_LOOKBACK);
-	return nearbyPhotos.some((previousPhoto) => {
-		const previousHash = normalizePhash(previousPhoto.phash);
-		return previousHash ? hammingDistance(previousHash, currentHash) <= MAX_PHASH_DISTANCE : false;
+	function union(leftIndex: number, rightIndex: number) {
+		const leftRoot = find(leftIndex);
+		const rightRoot = find(rightIndex);
+		if (leftRoot === rightRoot) {
+			return;
+		}
+		parents[rightRoot] = leftRoot;
+	}
+
+	for (let leftIndex = 0; leftIndex < normalizedHashes.length; leftIndex += 1) {
+		const leftHash = normalizedHashes[leftIndex];
+		if (!leftHash) {
+			continue;
+		}
+
+		for (let rightIndex = leftIndex + 1; rightIndex < normalizedHashes.length; rightIndex += 1) {
+			const rightHash = normalizedHashes[rightIndex];
+			if (!rightHash) {
+				continue;
+			}
+
+			if (hammingDistance(leftHash, rightHash) <= MAX_PHASH_DISTANCE) {
+				union(leftIndex, rightIndex);
+			}
+		}
+	}
+
+	const groups = new Map<number, number[]>();
+	photos.forEach((_photo, index) => {
+		const rootIndex = normalizedHashes[index] ? find(index) : index;
+		const memberIndices = groups.get(rootIndex) ?? [];
+		memberIndices.push(index);
+		groups.set(rootIndex, memberIndices);
 	});
+
+	return [...groups.values()]
+		.sort((leftMembers, rightMembers) => leftMembers[0] - rightMembers[0])
+		.map((memberIndices) => {
+			const startIndex = memberIndices[0];
+			const representative = photos[startIndex];
+			return {
+				...representative,
+				lightboxIndex: startIndex,
+				groupedPhotoCount: memberIndices.length,
+				groupMemberIndices: memberIndices,
+			};
+		});
 }
 
 function normalizePhash(value?: string) {

@@ -1,101 +1,371 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Travel Photo Album
 
-## Getting Started
+A self-hosted photo and video browser for large travel archives, built with Next.js App Router and backed by lazy thumbnail generation, metadata extraction, geolocation enrichment, perceptual hashing, and full-library search.
 
-First, run the development server:
+It is designed for real folders on disk rather than an imported asset database: point a collection at an existing media root, browse by folder and day, open photos or videos in a rich lightbox, inspect EXIF and derived metadata, and backfill missing data incrementally with queue workers.
+
+## Contents
+
+- [Why this project exists](#why-this-project-exists)
+- [Highlights](#highlights)
+- [Screenshot placeholders](#screenshot-placeholders)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Feature tour](#feature-tour)
+- [Getting started](#getting-started)
+- [Optional services with Docker](#optional-services-with-docker)
+- [Core workflows](#core-workflows)
+- [Validation](#validation)
+- [Repository layout](#repository-layout)
+- [Operational notes](#operational-notes)
+- [Troubleshooting](#troubleshooting)
+- [Roadmap ideas](#roadmap-ideas)
+
+## Why this project exists
+
+Travel archives tend to sprawl across years, cameras, phones, exported albums, drones, and NAS shares. This app gives that archive a usable interface without forcing a one-time ingestion step:
+
+- **Browse by collection, folder, and day**
+- **Generate thumbnails and metadata on demand**
+- **Open photos and videos in a single viewer**
+- **Inspect EXIF plus derived metadata in a sidebar**
+- **Search by generated descriptions and detected cities**
+- **Queue heavy work into background workers instead of blocking page loads**
+
+## Highlights
+
+| Capability | What it does |
+| --- | --- |
+| Collection browser | Uses `config.json` as the source of truth for mounted travel collections. |
+| Folder + day navigation | Recursively browses folders, groups media by day, and opens each day as a gallery. |
+| Fast previews | Serves thumbnails from `thumbPath` or Kvrocks and upgrades to larger media in the lightbox. |
+| Mixed media support | Handles both photos and videos in the gallery and single-item viewer. |
+| Rich metadata | Shows EXIF, computed dimensions, description, dominant color, GPS, city, and pHash. |
+| Search | Builds a SQLite search index for description and location-based discovery across collections. |
+| Background processing | Uses BullMQ workers for thumbnail, metadata, and description jobs. |
+| Operational scripts | Includes warmup, queue scan, geolocation backfill, pHash backfill, and search indexing scripts. |
+
+## Screenshot placeholders
+
+Drop final screenshots into `docs/screenshots/` and replace the placeholder notes below with real images.
+
+| Placeholder path | What to capture |
+| --- | --- |
+| `docs/screenshots/01-home-overview.png` | Main home screen with collection picker, current path, folder tree, and day timeline. |
+| `docs/screenshots/02-folder-navigation.png` | Recursive folder navigation expanded several levels deep. |
+| `docs/screenshots/03-day-gallery.png` | Single day gallery with grouped similar shots and pHash badges. |
+| `docs/screenshots/04-lightbox-photo.png` | Large photo lightbox showing the immediate thumbnail preview before the full-size asset loads. |
+| `docs/screenshots/05-lightbox-video.png` | Video playback in the lightbox with poster frame and controls. |
+| `docs/screenshots/06-metadata-sidebar.png` | EXIF sidebar with description, dominant color, city, GPS, dimensions, and raw metadata details. |
+| `docs/screenshots/07-search-results.png` | Search results page showing grouped matching days and preview grids. |
+| `docs/screenshots/08-queue-status.png` | Queue progress widget during thumbnail and metadata processing. |
+| `docs/screenshots/09-error-details.png` | Detailed fetch failure state with request URL, status, and retry button. |
+
+## Architecture at a glance
+
+### Frontend
+
+- `app/page.tsx` loads normalized collection config on the server.
+- `app/_components/` contains the client UI: header, folder tree, timeline, day gallery, lightbox, metadata sidebars, and queue widget.
+- `app/search/page.tsx` exposes cross-library search for descriptions and city names.
+
+### API routes
+
+Route handlers in `app/api/**` are thin adapters over the filesystem and metadata helpers:
+
+- `/api/files` lists folders and files for navigation
+- `/api/dates` groups visible files by day and returns location summaries
+- `/api/filesByDate` returns media for a single day
+- `/api/photo` streams original assets
+- `/api/thumb` serves or generates thumbnails
+- `/api/meta` returns normalized metadata plus the raw stored metadata entry
+- `/api/info`, `/api/folder-info`, and `/api/queue-info` power sidebars and ops widgets
+
+### Storage model
+
+- **Original media** stays on your existing filesystem or NAS
+- **Collection definitions** live in `config.json`
+- **Thumbnail blobs / directory metadata** live in `thumbPath` folders or Kvrocks
+- **BullMQ queue state** lives in Redis and is persisted locally in `./redis`
+- **Search index** lives in `./data/search-index.sqlite` by default
+
+### Workers
+
+- `scripts/media-worker.ts` handles thumbnails, EXIF, and metadata persistence
+- `scripts/description-worker.ts` handles image description generation on a separate queue
+
+## Feature tour
+
+### 1. Browse by trip, folder, and day
+
+Collections come from `config.json`. Each section is exposed by its array index, so collection order matters. The UI lets you:
+
+- choose a collection from the header
+- open nested folders from the left sidebar
+- browse media grouped by date
+- jump straight into a day-level gallery
+
+### 2. Open a media-aware lightbox
+
+The shared lightbox supports:
+
+- photo viewing with thumbnail-first progressive loading
+- video playback with poster frames and controls
+- previous/next navigation
+- footer editing flows such as description updates
+- an EXIF button that opens the metadata sidebar
+
+### 3. Inspect rich metadata
+
+Metadata is not limited to raw EXIF. The sidebar surfaces:
+
+- stored EXIF payload
+- computed width and height
+- dominant color
+- generated or stored description
+- GPS coordinates
+- reverse-geocoded city / locality
+- perceptual hash (`pHash`)
+
+### 4. Search across the archive
+
+The search page groups matches by day and folder so you can find:
+
+- places based on city names derived from GPS
+- moments based on generated image descriptions
+- visually inspect matching days before opening them
+
+### 5. Group similar photos
+
+Within a day, similar images can be grouped using perceptual hashes so burst shots or near-duplicates do not dominate the timeline.
+
+## Getting started
+
+### Prerequisites
+
+- Node.js 20+ recommended
+- npm
+- access to the media folders referenced by `config.json`
+- optional: Docker Desktop for Kvrocks, Redis, and worker containers
+- optional: `ffmpeg` for video thumbnail generation workflows
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure collections
+
+Edit `config.json` to point at your media roots.
+
+Example:
+
+```json
+{
+  "sections": [
+    {
+      "name": "P:/Photos",
+      "linuxPath": "/media/nas/photo/Photos",
+      "macPath": "/Volumes/photo/Photos",
+      "winPath": "P:/Photos",
+      "thumbPath": "./data/synology-photos"
+    }
+  ]
+}
+```
+
+Notes:
+
+- `macPath`, `linuxPath`, and `winPath` are normalized by `lib/config.ts`
+- `thumbPath` is optional; without it, thumbnails and metadata can be stored in Kvrocks
+- `from` and `till` can limit the visible root-range within a collection
+
+### 3. Configure environment variables
+
+```bash
+cp .env.example .env
+cp .env.example .env.local
+```
+
+Important defaults from `.env.example`:
+
+- `REDIS_URL` and `THUMB_KV_URL` target Kvrocks on port `6666`
+- `BULLMQ_REDIS_URL` and `THUMB_QUEUE_URL` target Redis on port `6379`
+- `DESCRIPTION_QUEUE_URL` controls the dedicated description queue
+- `OLLAMA_BASE_URL` and `OLLAMA_MODEL` control auto-generated descriptions
+- `MEDIA_ROOT_HOST_PATH` maps your host media path into Docker worker containers
+
+### 4. Start the app
 
 ```bash
 npm run dev
-# or
-yarn dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open <http://localhost:3000>.
 
-### Optional Kvrocks cache, Redis queues, BullMQ workers, thumbnail store, and Ollama captions
+## Optional services with Docker
 
-Folder listings used by `/api/files/...` can be cached in Kvrocks during local development, generated thumbnails for sections without `thumbPath` are persisted there, and BullMQ jobs can now be drained by a dedicated permanent worker.
-BullMQ now uses a dedicated Redis instance, while Kvrocks remains available for the folder cache and thumbnail blob store.
-Set `REDIS_FOLDER_CACHE_TTL_SECONDS=0` to keep cached entries forever.
-Redis queue data is now bind-mounted into the repository `redis/` folder so it survives Docker volume cleanup.
+Bring up the local services and workers:
 
 ```bash
-cp .env.example .env.local
-cp .env.example .env
 docker compose up -d kvrocks redis media-worker description-worker
 ```
 
-The scanner and worker scripts (`warmup:thumbs`, `queue:scan`, `worker:media`, `worker:description`) load `.env` automatically via `dotenv`, so queue/cache settings apply even when you run them directly with `npm run ...`.
+What each service does:
 
-The worker container expects the media root to be mounted at the same Linux path used by `config.json` (defaults to `/media/nas/photo` inside the container). On macOS/Docker Desktop the host path now defaults to `/Volumes/photo`; override `MEDIA_ROOT_HOST_PATH` in `.env` if your library is mounted somewhere else, and make sure that host path is shared with Docker.
+- `kvrocks`: folder cache and thumbnail/blob metadata storage
+- `redis`: BullMQ queue backend, persisted in `./redis`
+- `media-worker`: background thumbnails, metadata, EXIF, and related processing
+- `description-worker`: automatic image descriptions using Ollama on a separate queue
 
-By default:
-
-- `REDIS_URL` is used for the folder cache and should point at Kvrocks on port `6666`
-- `THUMB_KV_URL` is used for thumbnail/blob metadata storage and should point at Kvrocks on port `6666`
-- `THUMB_QUEUE_URL` and `BULLMQ_REDIS_URL` point at the dedicated Redis container on port `6379`
-- `DESCRIPTION_QUEUE_URL` / `DESCRIPTION_QUEUE_NAME` let caption generation run on a separate BullMQ queue from thumbnail warmup
-- `OLLAMA_BASE_URL` and `OLLAMA_MODEL` control automatic image descriptions; the Docker `description-worker` service starts its own Ollama daemon, bootstraps the Ollama binary on first start, and uses `DESCRIPTION_WORKER_OLLAMA_BASE_URL`
-- `MEDIA_WORKER_*` and `DESCRIPTION_WORKER_*` overrides are available if the worker containers need different in-network URLs than your local host setup
-
-Restart Kvrocks automatically when its critical config changes:
+Useful watch commands during development:
 
 ```bash
 docker compose watch kvrocks
-```
-
-Sync worker code changes into the container and restart it automatically:
-
-```bash
 docker compose watch media-worker
 docker compose watch description-worker
 ```
 
-Scan an entire collection locally and enqueue thumbnail jobs for all nested folders:
+## Core workflows
+
+### Warm an entire collection
+
+Recursively scan one collection and enqueue work for all nested folders:
 
 ```bash
 npm run warmup:thumbs -- 5
 npm run warmup:thumbs -- "P:/Photos"
 ```
 
-`npm run warmup:thumbs` and `npm run queue:scan` both enqueue jobs only; thumbnail/metadata work runs in `worker:media`, while description generation runs in `worker:description`.
+Optional flags:
 
-Description jobs use their own BullMQ queue (`DESCRIPTION_QUEUE_NAME`, default
-`description-jobs`) and their own worker concurrency (`DESCRIPTION_WORKER_CONCURRENCY`,
-default `1`), so caption generation does not block thumbnail warmup. Set `OLLAMA_MODEL`
-to a vision-capable model that your Ollama instance can run; the bundled `description-worker`
-container bootstraps the Ollama binary on first start, runs `ollama serve`, pulls that model,
-and then drains the description queue. Rerun `npm run warmup:thumbs -- <collection>` to
-backfill missing image descriptions. Existing manual descriptions are preserved.
+- `--force`
+- `--force-rotated`
 
-You can also queue an entire collection from inside the worker container:
+### Queue a full collection scan
 
 ```bash
 npm run queue:scan -- 5
 docker compose run --rm media-worker npm run queue:scan -- 5
 ```
 
-The permanent worker entrypoints are `npm run worker:media` for thumbs/EXIF/meta and
-`npm run worker:description` for Ollama descriptions. `node test/queue-processor.ts` is
-available as a one-shot queue drainer for local debugging.
+### Run the workers directly
 
-You can start editing the main gallery UI in `app/page.tsx` and the colocated client components under `app/_components/`. The page auto-updates as you edit the file.
+```bash
+npm run worker:media
+npm run worker:description
+```
 
-[Route handlers](https://nextjs.org/docs/app/building-your-application/routing/route-handlers) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `app/api/hello/route.ts`.
+### Backfill geolocation from stored GPS
 
-The `app/api` directory is mapped to `/api/*`. Files in this directory are treated as [route handlers](https://nextjs.org/docs/app/building-your-application/routing/route-handlers).
+```bash
+npm run index:geolocation
+npm run index:geolocation -- --force
+```
 
-## Learn More
+This scans stored metadata in Kvrocks and fills in reverse-geocoded city information where possible.
 
-To learn more about Next.js, take a look at the following resources:
+### Backfill missing perceptual hashes from stored thumbnails
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run index:phash -- 5
+npm run index:phash -- "P:/Photos" --force
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+This script:
 
-## Deploy on Vercel
+- scans the collection directory tree to discover files
+- reads existing stored thumbnails only
+- computes missing pHashes from those thumbnails
+- writes the resulting hash back into stored metadata
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Build the search index
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+```bash
+npm run index:search
+npm run index:search -- --section 5
+npm run index:search -- --section "P:/Photos"
+```
+
+## Validation
+
+Use these commands to validate changes:
+
+```bash
+npm run typecheck
+npm run build
+```
+
+`npm run lint` is currently stale because the repo still points to `next lint`, which is no longer provided by Next.js 16, and the ESLint config has not yet been migrated to the flat config format required by ESLint 10.
+
+## Repository layout
+
+```text
+app/
+  api/                 Next.js route handlers
+  _components/         Colocated client UI
+  search/              Search results page
+lib/
+  config.ts            Platform-aware collection config normalization
+  files.ts             Filesystem helpers and date extraction
+  file-meta.ts         Metadata, GPS, and pHash helpers
+  thumb-store.ts       Thumbnail/blob storage access
+  search-index.ts      SQLite search index helpers
+scripts/
+  warmup-thumbnails.ts
+  enqueue-collection-scan.ts
+  media-worker.ts
+  description-worker.ts
+  index-geolocation.ts
+  index-phash.ts
+  index-search.ts
+data/                  Generated local artifacts, including SQLite index
+kvrocks/               Local Kvrocks persistence
+redis/                 Local Redis persistence
+```
+
+## Operational notes
+
+- `config.json` section order is part of the public API because the array index becomes the `sectionId`
+- `lib/files.ts#getFileDate()` extracts `YYYYMMDD` from filenames before falling back to filesystem timestamps
+- API payload shapes are intentionally stable because the client expects fields such as `{ files }`, `{ dates }`, and `COMPUTED.Width`
+- `data/` is ignored and safe for generated local artifacts
+- Redis automatically reloads `dump.rdb` from `./redis` on startup
+
+## Troubleshooting
+
+### Thumbnails or metadata are missing
+
+- confirm the collection path in `config.json`
+- verify Kvrocks and Redis connectivity if you use queue-backed storage
+- run `npm run warmup:thumbs -- <collection>`
+- ensure `media-worker` is running for queued jobs
+
+### Search returns no results
+
+- make sure descriptions or city metadata exist
+- run `npm run index:search`
+- if using generated descriptions, ensure the description worker and Ollama are configured
+
+### pHash is missing
+
+- make sure thumbnails already exist
+- run `npm run index:phash -- <collection-id-or-name>`
+
+### Docker storage keeps disappearing
+
+- Redis is bind-mounted to `./redis`
+- Kvrocks is bind-mounted to `./kvrocks`
+- the SQLite search index lives under `./data`
+
+## Roadmap ideas
+
+- screenshot gallery in the README once assets are captured
+- richer map-based browsing
+- batch metadata editing
+- smarter duplicate review workflows
+- flat-config ESLint migration
+
+## License
+
+Add your preferred license here.
