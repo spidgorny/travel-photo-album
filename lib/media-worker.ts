@@ -25,10 +25,12 @@ thumbQueuePrefix,
 thumbQueueUrl,
 } from "./thumb-jobs.ts";
 import {
+buildGeneratedImageThumb,
 ensureSectionThumb,
 getMediaKind,
 hasStoredSectionThumb,
 isVideoPath,
+persistGeneratedImageThumb,
 readStoredSectionThumb,
 thumbnailTargetWidth,
 } from "./thumb-store.ts";
@@ -380,18 +382,31 @@ async function warmSectionThumb(payload) {
 		}, steps);
 	}
 	}
-	const thumb = await runPipelineStep(steps, "generate thumbnail", async () =>
-		ensureSectionThumb(
-			sectionId,
-			section,
-			filePath,
-			variant,
-			undefined,
-			{
-				sourceBuffer: getImageSourceBuffer ? await getImageSourceBuffer() : undefined,
-			},
-		),
-	);
+	const thumb =
+		mediaKind === "image" && !isVideoPath(filePath)
+			? await (async () => {
+				const sourceBuffer = await runPipelineStep(steps, "read source image", () =>
+					getImageSourceBuffer(),
+				);
+				const generatedThumb = await runPipelineStep(steps, "build thumbnail buffer", () =>
+					buildGeneratedImageThumb(sectionId, section, filePath, variant, sourceBuffer),
+				);
+				return runPipelineStep(steps, "store generated thumbnail", () =>
+					persistGeneratedImageThumb(sectionId, section, filePath, generatedThumb, variant),
+				);
+			})()
+			: await runPipelineStep(steps, "generate thumbnail", async () =>
+				ensureSectionThumb(
+					sectionId,
+					section,
+					filePath,
+					variant,
+					undefined,
+					{
+						sourceBuffer: getImageSourceBuffer ? await getImageSourceBuffer() : undefined,
+					},
+				),
+			);
 	if (mediaKind === "image" && !isVideoPath(filePath)) {
 		const thumbPhashSource =
 			thumb.kind === "buffer" ? thumb.buffer : thumb.generatedBuffer;

@@ -463,6 +463,28 @@ export async function ensureImageThumb(
 			source: "kvrocks",
 		};
 	}
+	const thumb = await buildGeneratedImageThumb(
+		sectionId,
+		section,
+		filePath,
+		variant,
+		sourceBuffer,
+	);
+	await storeThumb(sectionId, filePath, thumb, variant);
+	return {
+		...thumb,
+		source: "generated",
+	};
+}
+
+export async function buildGeneratedImageThumb(
+	sectionId,
+	section,
+	filePath,
+	variant = `w${thumbnailTargetWidth}-jpeg`,
+	sourceBuffer = undefined,
+) {
+	invariant(!isVideoPath(filePath), "buildGeneratedImageThumb only supports image files");
 	invariant(section.path, "section.path");
 	const fullPath = joinSectionPath(section.path, filePath);
 	const sourceInput = sourceBuffer ?? fullPath;
@@ -473,17 +495,12 @@ export async function ensureImageThumb(
 		.jpeg()
 		.toBuffer();
 	const dominantColor = await getDominantColorFromBuffer(buffer);
-	const thumb = {
+	return {
 		buffer,
 		mimeType: "image/jpeg",
 		width: dimensions.width,
 		height: dimensions.height,
 		dominantColor,
-	};
-	await storeThumb(sectionId, filePath, thumb, variant);
-	return {
-		...thumb,
-		source: "generated",
 	};
 }
 
@@ -617,6 +634,35 @@ async function ensureResizedImageThumb(section, filePath, sourceBuffer = undefin
 		mimeType: mime.lookup(thumbFile) || "application/octet-stream",
 		source: "generated:resize",
 		generatedBuffer: buffer,
+	};
+}
+
+export async function persistGeneratedImageThumb(
+	sectionId,
+	section,
+	filePath,
+	thumb,
+	variant = `w${thumbnailTargetWidth}-jpeg`,
+) {
+	if (!section.thumbPath) {
+		await storeThumb(sectionId, filePath, thumb, variant);
+		return {
+			kind: "buffer",
+			...thumb,
+			source: "generated",
+		};
+	}
+
+	invariant(section.thumbPath, "section.thumbPath");
+	const thumbFile = getThumbFilePath(section.thumbPath, filePath);
+	fs.mkdirSync(path.dirname(thumbFile), { recursive: true });
+	fs.writeFileSync(thumbFile, thumb.buffer);
+	return {
+		kind: "file",
+		path: thumbFile,
+		mimeType: mime.lookup(thumbFile) || thumb.mimeType || "application/octet-stream",
+		source: "generated:resize",
+		generatedBuffer: thumb.buffer,
 	};
 }
 
