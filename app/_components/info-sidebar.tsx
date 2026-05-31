@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import type { AppInfoResponse } from "./ui-types";
-import { Loading } from "./widget/loading";
+import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 
 interface InfoSidebarProps {
 	isOpen: boolean;
@@ -19,7 +19,7 @@ export function InfoSidebar({
 	activeCollection,
 	activeFolder,
 }: InfoSidebarProps) {
-	const { data, error, isLoading } = useSWR<AppInfoResponse>(
+	const { data, error, isLoading, mutate } = useSWR<AppInfoResponse>(
 		isOpen ? "/api/info" : null,
 		fetcher,
 	);
@@ -101,16 +101,19 @@ export function InfoSidebar({
 						</div>
 					</section>
 
-					{isLoading ? (
+					{isLoading && !error && !data ? (
 						<div className="flex min-h-[16rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-900/40">
 							<Loading />
 						</div>
 					) : null}
 
 					{error ? (
-						<div className="rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
-							Failed to load system info.
-						</div>
+						<ErrorState
+							message="Failed to load system info."
+							error={error}
+							details={getErrorMessage(error)}
+							onRetry={() => mutate()}
+						/>
 					) : null}
 
 					{data ? (

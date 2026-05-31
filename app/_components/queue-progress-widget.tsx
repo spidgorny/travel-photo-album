@@ -4,9 +4,10 @@ import { useRef } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import type { QueueProgressResponse } from "./ui-types";
+import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 
 export function QueueProgressWidget() {
-	const { data } = useSWR<QueueProgressResponse>("/api/queue-info", fetcher, {
+	const { data, error, isLoading, mutate } = useSWR<QueueProgressResponse>("/api/queue-info", fetcher, {
 		refreshInterval: 10_000,
 		revalidateOnFocus: false,
 	});
@@ -14,6 +15,33 @@ export function QueueProgressWidget() {
 	const totalObservedRef = useRef(0);
 	const processedObservedRef = useRef(0);
 	const previousQueuedRef = useRef(0);
+
+	if (error && !data) {
+		return (
+			<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-[19rem] lg:shrink-0">
+				<div className="text-xs uppercase tracking-[0.2em] text-slate-400">Queue progress</div>
+				<div className="mt-3">
+					<ErrorState
+						message="Failed to load queue progress."
+						error={error}
+						details={getErrorMessage(error)}
+						onRetry={() => mutate()}
+					/>
+				</div>
+			</div>
+		);
+	}
+
+	if (isLoading && !data) {
+		return (
+			<div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-[19rem] lg:shrink-0">
+				<div className="text-xs uppercase tracking-[0.2em] text-slate-400">Queue progress</div>
+				<div className="mt-3 text-sm text-slate-300">
+					<Loading />
+				</div>
+			</div>
+		);
+	}
 
 	if (!data?.queue.configured) {
 		return (
@@ -63,6 +91,16 @@ export function QueueProgressWidget() {
 					{processed}/{totalObserved || processed}
 				</div>
 			</div>
+			{error ? (
+				<div className="mt-3">
+					<ErrorState
+						message="Showing the last queue snapshot."
+						error={error}
+						details={getErrorMessage(error) ?? "Refresh failed."}
+						onRetry={() => mutate()}
+					/>
+				</div>
+			) : null}
 		</div>
 	);
 }

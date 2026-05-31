@@ -17,7 +17,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - ./redis:/data
 
   media-worker:
     build:
@@ -125,5 +125,4 @@ services:
           path: ./docker/description-worker/entrypoint.sh
 
 volumes:
-  redis_data:
   ollama_data:

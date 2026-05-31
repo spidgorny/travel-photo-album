@@ -17,6 +17,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 Folder listings used by `/api/files/...` can be cached in Kvrocks during local development, generated thumbnails for sections without `thumbPath` are persisted there, and BullMQ jobs can now be drained by a dedicated permanent worker.
 BullMQ now uses a dedicated Redis instance, while Kvrocks remains available for the folder cache and thumbnail blob store.
 Set `REDIS_FOLDER_CACHE_TTL_SECONDS=0` to keep cached entries forever.
+Redis queue data is now bind-mounted into the repository `redis/` folder so it survives Docker volume cleanup.
 
 ```bash
 cp .env.example .env.local

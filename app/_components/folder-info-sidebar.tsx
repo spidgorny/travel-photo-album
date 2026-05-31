@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import type { FolderInfoResponse } from "./ui-types";
-import { Loading } from "./widget/loading";
+import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 
 interface FolderInfoSidebarProps {
 	isOpen: boolean;
@@ -23,7 +23,7 @@ export function FolderInfoSidebar({
 }: FolderInfoSidebarProps) {
 	const apiUrl =
 		sectionId >= 0 ? (folder ? `/api/folder-info/${sectionId}/${folder}` : `/api/folder-info/${sectionId}`) : null;
-	const { data, error, isLoading } = useSWR<FolderInfoResponse>(isOpen ? apiUrl : null, fetcher);
+	const { data, error, isLoading, mutate } = useSWR<FolderInfoResponse>(isOpen ? apiUrl : null, fetcher);
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -88,16 +88,19 @@ export function FolderInfoSidebar({
 						</div>
 					</section>
 
-					{isLoading ? (
+					{isLoading && !error && !data ? (
 						<div className="flex min-h-[16rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-900/40">
 							<Loading />
 						</div>
 					) : null}
 
 					{error ? (
-						<div className="rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
-							Failed to load folder info.
-						</div>
+						<ErrorState
+							message="Failed to load folder info."
+							error={error}
+							details={getErrorMessage(error)}
+							onRetry={() => mutate()}
+						/>
 					) : null}
 
 					{data ? (

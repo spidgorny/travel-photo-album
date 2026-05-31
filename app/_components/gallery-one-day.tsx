@@ -9,7 +9,7 @@ import { PhashBitmap } from "./phash-bitmap";
 import { MetadataSidebar, PhotoLightbox } from "./photo-lightbox";
 import type { FilesResponse, GalleryPhoto, MetaResponse } from "./ui-types";
 import { buildApiPath } from "./url-paths";
-import { Loading } from "./widget/loading";
+import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 
 interface GalleryOneDayProps {
 	sectionId: number;
@@ -54,7 +54,7 @@ const MAX_PHASH_DISTANCE = 28;
 
 export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 	const apiUrl = buildApiPath("/api/filesByDate", sectionId, folder, date);
-	const { data } = useSWR<FilesResponse>(apiUrl, fetcher);
+	const { data, error, mutate } = useSWR<FilesResponse>(apiUrl, fetcher);
 
 	const [currentImage, setCurrentImage] = useState(0);
 	const [viewerIsOpen, setViewerIsOpen] = useState(false);
@@ -172,6 +172,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 	const {
 		data: currentMeta,
 		error: currentMetaError,
+		mutate: mutateCurrentMeta,
 	} = useSWR<MetaResponse>(currentMetaUrl, fetcher, {
 		revalidateOnFocus: false,
 	});
@@ -217,7 +218,15 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 
 	return (
 		<div className="space-y-4">
-			{!data && (
+			{error ? (
+				<ErrorState
+					message={`Failed to load photos for ${date === "undated" ? "undated photos" : date}.`}
+					error={error}
+					details={getErrorMessage(error)}
+					onRetry={() => mutate()}
+				/>
+			) : null}
+			{!data && !error && (
 				<div className="flex min-h-[12rem] items-center justify-center rounded-3xl border border-dashed border-white/10 bg-slate-950/40">
 					<Loading />
 				</div>
@@ -260,12 +269,12 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 								content: (
 									<MetadataSidebar
 										metadata={currentStoredMeta}
+										meta={currentMeta}
+										photo={currentPhoto}
 										isLoading={Boolean(currentMetaUrl) && !currentMeta && !currentMetaError}
-										errorMessage={
-											currentMetaError instanceof Error
-												? currentMetaError.message
-												: undefined
-										}
+										error={currentMetaError}
+										errorMessage={getErrorMessage(currentMetaError)}
+										onRetry={currentMetaUrl ? () => mutateCurrentMeta() : undefined}
 									/>
 								),
 							}

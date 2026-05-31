@@ -250,7 +250,8 @@ export async function buildImageMetaData(
 	const location = geocodeGpsCoordinates(gps);
 	const existingMeta = await readStoredMetaForFile(section, filePath);
 	const description = normalizeStoredDescription(existingMeta?.description);
-	const phash = (await buildPerceptualHash(fullPath)) ?? normalizeStoredPhash(existingMeta?.phash);
+	const phash =
+		(await buildPerceptualHashFromFile(fullPath)) ?? normalizeStoredPhash(existingMeta?.phash);
 
 	return {
 		FileName: path.basename(fullPath),
@@ -378,29 +379,41 @@ function reverseGeocodeLocation(gps: FileGpsCoordinates): FileLocationLabel | nu
 	}
 }
 
-async function buildPerceptualHash(fullPath: string): Promise<string | null> {
+export async function buildPerceptualHashFromFile(fullPath: string): Promise<string | null> {
 	try {
-		const buffer = await sharp(fullPath)
-			.rotate()
-			.resize(phashSampleSize, phashSampleSize, { fit: "fill" })
-			.grayscale()
-			.raw()
-			.toBuffer();
-		const matrix = new Array(phashSampleSize)
-			.fill(null)
-			.map((_, rowIndex) =>
-				new Array(phashSampleSize)
-					.fill(0)
-					.map((__, columnIndex) => buffer[rowIndex * phashSampleSize + columnIndex] ?? 0),
-			);
-		const coefficients = discreteCosineTransform(matrix, phashSize);
-		const values = coefficients.flat();
-		const threshold = median(values.slice(1));
-		const bits = values.map((value) => (value > threshold ? "1" : "0")).join("");
-		return bitsToHex(bits);
+		return await buildPerceptualHashFromSharpInput(fullPath);
 	} catch {
 		return null;
 	}
+}
+
+export async function buildPerceptualHashFromBuffer(buffer: Buffer): Promise<string | null> {
+	try {
+		return await buildPerceptualHashFromSharpInput(buffer);
+	} catch {
+		return null;
+	}
+}
+
+async function buildPerceptualHashFromSharpInput(input: string | Buffer) {
+	const buffer = await sharp(input)
+		.rotate()
+		.resize(phashSampleSize, phashSampleSize, { fit: "fill" })
+		.grayscale()
+		.raw()
+		.toBuffer();
+	const matrix = new Array(phashSampleSize)
+		.fill(null)
+		.map((_, rowIndex) =>
+			new Array(phashSampleSize)
+				.fill(0)
+				.map((__, columnIndex) => buffer[rowIndex * phashSampleSize + columnIndex] ?? 0),
+		);
+	const coefficients = discreteCosineTransform(matrix, phashSize);
+	const values = coefficients.flat();
+	const threshold = median(values.slice(1));
+	const bits = values.map((value) => (value > threshold ? "1" : "0")).join("");
+	return bitsToHex(bits);
 }
 
 function discreteCosineTransform(matrix: number[][], sampleCount: number) {

@@ -480,6 +480,69 @@ function getExistingDiskThumb(thumbRoot, filePath, candidates = [null]) {
 	return null;
 }
 
+export async function readStoredSectionThumb(
+	sectionId,
+	section,
+	filePath,
+	variant = `w${thumbnailTargetWidth}-jpeg`,
+	frameIndex,
+) {
+	if (isVideoPath(filePath)) {
+		const { requestedVariant } = parseRequestedVideoVariant(variant, frameIndex);
+		const cachedVideoThumb = await getStoredThumb(sectionId, filePath, requestedVariant);
+		if (cachedVideoThumb) {
+			return {
+				kind: "buffer",
+				buffer: cachedVideoThumb.buffer,
+				mimeType: cachedVideoThumb.mimeType,
+				source: `kvrocks:${requestedVariant}`,
+			};
+		}
+		if (!section.thumbPath) {
+			return null;
+		}
+		const diskVideoThumb = getExistingDiskThumb(section.thumbPath, filePath, [
+			".webp",
+			".jpg",
+			".jpeg",
+			null,
+		]);
+		if (!diskVideoThumb) {
+			return null;
+		}
+		return {
+			kind: "buffer",
+			buffer: fs.readFileSync(diskVideoThumb.path),
+			mimeType: diskVideoThumb.mimeType,
+			source: diskVideoThumb.source,
+		};
+	}
+
+	if (!section.thumbPath) {
+		const cachedThumb = await getStoredThumb(sectionId, filePath, variant);
+		if (!cachedThumb) {
+			return null;
+		}
+		return {
+			kind: "buffer",
+			buffer: cachedThumb.buffer,
+			mimeType: cachedThumb.mimeType,
+			source: `kvrocks:${variant}`,
+		};
+	}
+
+	const diskThumb = getExistingDiskThumb(section.thumbPath, filePath, [null, ".webp"]);
+	if (!diskThumb) {
+		return null;
+	}
+	return {
+		kind: "buffer",
+		buffer: fs.readFileSync(diskThumb.path),
+		mimeType: diskThumb.mimeType,
+		source: diskThumb.source,
+	};
+}
+
 export async function hasStoredSectionThumb(sectionId, section, filePath, variant) {
 	if (isVideoPath(filePath)) {
 		const { requestedVariant } = parseRequestedVideoVariant(variant);

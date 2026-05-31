@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { fetcher } from "../../../lib/http";
 import type { FilesApiEntry, FilesResponse, UISection } from "../ui-types";
 import { buildApiPath, buildHomeHref } from "../url-paths";
+import { ErrorState, getErrorMessage } from "../widget/loading";
 
 const folderNameCollator = new Intl.Collator(undefined, {
 	numeric: true,
@@ -73,13 +74,25 @@ interface SubFoldersProps {
 }
 
 export function SubFolders({ section, activeFolder, thePath }: SubFoldersProps) {
-	const { data } = useSWR<FilesResponse>(buildApiPath("/api/files", section.id, thePath), fetcher);
+	const requestUrl = buildApiPath("/api/files", section.id, thePath);
+	const { data, error, mutate } = useSWR<FilesResponse>(requestUrl, fetcher);
 	const files = Array.isArray(data?.files) ? data.files : [];
 	const dirs = files
 		.filter((file): file is FilesApiEntry => Boolean(file?.isDir))
 		.sort((firstDir, secondDir) =>
 			folderNameCollator.compare(firstDir.path, secondDir.path),
 		);
+
+	if (error && !data) {
+		return (
+			<ErrorState
+				message={thePath ? "Failed to load subfolders." : "Failed to load folders."}
+				error={error}
+				details={getErrorMessage(error)}
+				onRetry={() => mutate()}
+			/>
+		);
+	}
 
 	if (!data) {
 		return (
@@ -100,6 +113,16 @@ export function SubFolders({ section, activeFolder, thePath }: SubFoldersProps) 
 
 	return (
 		<ul className={thePath ? "mt-2 space-y-2 border-l border-white/10 pl-4" : "space-y-2"}>
+			{error ? (
+				<li>
+					<ErrorState
+						message="Showing the last loaded folder list."
+						error={error}
+						details={getErrorMessage(error)}
+						onRetry={() => mutate()}
+					/>
+				</li>
+			) : null}
 			{dirs.map((folderEntry) => (
 				<FolderNode
 					key={folderEntry.path}

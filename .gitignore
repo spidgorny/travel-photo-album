@@ -34,5 +34,6 @@ yarn-error.log*
 .idea/
 data/
 kvrocks/
+redis/
 queue/
 *.tsbuildinfo

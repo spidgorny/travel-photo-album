@@ -8,7 +8,7 @@ import { FolderInfoSidebar } from "./folder-info-sidebar";
 import { GalleryOneDay } from "./gallery-one-day";
 import { buildDayAnchorId, createGoogleMapsHref } from "./url-paths";
 import type { DatesResponse, DaySummary, UISection } from "./ui-types";
-import { Loading } from "./widget/loading";
+import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 
 interface GalleryForProps {
 	section: UISection;
@@ -24,8 +24,21 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 		requestedPage > 1
 			? `/api/dates/${section.id}/${folder}?page=${requestedPage}`
 			: `/api/dates/${section.id}/${folder}`;
-	const { data } = useSWR<DatesResponse>(apiUrl, fetcher);
+	const { data, error, mutate } = useSWR<DatesResponse>(apiUrl, fetcher);
 	const [isFolderInfoOpen, setIsFolderInfoOpen] = useState(false);
+
+	if (error && !data) {
+		return (
+			<div className="flex min-h-[16rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-900/40 p-4">
+				<ErrorState
+					message="Failed to load the gallery timeline."
+					error={error}
+					details={getErrorMessage(error)}
+					onRetry={() => mutate()}
+				/>
+			</div>
+		);
+	}
 
 	if (!data) {
 		return (
@@ -74,6 +87,14 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 				folder={folder}
 			/>
 			<div className="space-y-6">
+				{error ? (
+					<ErrorState
+						message="Showing the last loaded gallery timeline."
+						error={error}
+						details={getErrorMessage(error)}
+						onRetry={() => mutate()}
+					/>
+				) : null}
 				<div className="flex flex-col gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-end sm:justify-between">
 					<div>
 						<div className="flex flex-wrap items-center gap-3">

@@ -3,19 +3,46 @@
 import { useCallback, useEffect, useState } from "react";
 
 export const fetcher = async (url) => {
-  const res = await fetch(url);
+  try {
+    const res = await fetch(url);
+    const contentType = res.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
 
-  // If the status code is not in the range 200-299,
-  // we still try to parse and throw it.
-  if (!res.ok) {
-    const error = new Error("An error occurred while fetching the data.");
-    // Attach extra info to the error object.
-    error.info = await res.json();
-    error.status = res.status;
-    throw error;
+    // If the status code is not in the range 200-299,
+    // we still try to parse and throw it.
+    if (!res.ok) {
+      const responseBody = isJson ? await res.json().catch(() => null) : await res.text().catch(() => "");
+      const errorMessage =
+        typeof responseBody?.error === "string"
+          ? responseBody.error
+          : typeof responseBody?.message === "string"
+            ? responseBody.message
+            : typeof responseBody === "string" && responseBody.trim()
+              ? responseBody.trim()
+              : `Request failed with status ${res.status}`;
+      const error = new Error(errorMessage);
+      // Attach extra info to the error object.
+      error.info = responseBody;
+      error.status = res.status;
+      error.statusText = res.statusText;
+      error.url = url;
+      throw error;
+    }
+
+    return isJson ? res.json() : res.text();
+  } catch (error) {
+    if (error instanceof Error) {
+      if (!("url" in error) || !error.url) {
+        error.url = url;
+      }
+      throw error;
+    }
+
+    const wrappedError = new Error("Request failed");
+    wrappedError.info = error;
+    wrappedError.url = url;
+    throw wrappedError;
   }
-
-  return res.json();
 };
 
 export function useFetcher(url, fetcher, options) {
