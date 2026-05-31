@@ -1,6 +1,7 @@
 // @ts-nocheck
 import crypto from "crypto";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import sizeOf from "image-size";
 import mime from "mime-types";
@@ -21,11 +22,14 @@ export const thumbnailTargetWidth =
 	Number.isFinite(parsedThumbnailWidth) && parsedThumbnailWidth > 0
 		? parsedThumbnailWidth
 		: defaultThumbnailWidth;
+export const videoThumbnailFrameCount = 10;
+export const defaultVideoThumbnailFrameIndex = Math.floor(videoThumbnailFrameCount / 2);
 
 let thumbKvClientPromise = null;
 let thumbKvDisabled = !thumbKvUrl;
 let thumbKvWarningWasShown = false;
 const defaultDominantColor = "#0f172a";
+const videoFrameVariantPattern = /:frame-(\d+)$/;
 
 function warnThumbKv(message, error = null) {
 	if (thumbKvWarningWasShown) {
@@ -48,6 +52,46 @@ function buildThumbKeys(sectionId, filePath, variant) {
 		blobKey: `${thumbKvPrefix}:blob:${hash}`,
 		metaKey: `${thumbKvPrefix}:meta:${hash}`,
 	};
+}
+
+function normalizeThumbVariant(variant = `w${thumbnailTargetWidth}-jpeg`) {
+	return typeof variant === "string" && variant.trim().length
+		? variant.trim()
+		: `w${thumbnailTargetWidth}-jpeg`;
+}
+
+function parseRequestedVideoVariant(variant, frameIndex) {
+	const normalizedVariant = normalizeThumbVariant(variant);
+	const matchedFrame = normalizedVariant.match(videoFrameVariantPattern);
+	const baseVariant = matchedFrame
+		? normalizedVariant.slice(0, -matchedFrame[0].length)
+		: normalizedVariant;
+	const resolvedFrameIndex = clampVideoFrameIndex(
+		frameIndex ?? (matchedFrame ? Number(matchedFrame[1]) : defaultVideoThumbnailFrameIndex),
+	);
+	return {
+		baseVariant,
+		frameIndex: resolvedFrameIndex,
+		requestedVariant: buildVideoFrameVariant(baseVariant, resolvedFrameIndex),
+	};
+}
+
+function buildVideoFrameVariant(variant, frameIndex) {
+	return `${normalizeThumbVariant(variant)}:frame-${clampVideoFrameIndex(frameIndex)}`;
+}
+
+function clampVideoFrameIndex(frameIndex) {
+	const parsedFrameIndex = Number(frameIndex);
+	if (!Number.isInteger(parsedFrameIndex)) {
+		return defaultVideoThumbnailFrameIndex;
+	}
+	return Math.max(0, Math.min(videoThumbnailFrameCount - 1, parsedFrameIndex));
+}
+
+function getTargetWidthForVariant(variant) {
+	const matchedWidth = normalizeThumbVariant(variant).match(/^w(\d+)/i);
+	const width = matchedWidth ? Number(matchedWidth[1]) : thumbnailTargetWidth;
+	return Number.isFinite(width) && width > 0 ? width : thumbnailTargetWidth;
 }
 
 export function isVideoPath(filePath) {
@@ -437,6 +481,18 @@ function getExistingDiskThumb(thumbRoot, filePath, candidates = [null]) {
 }
 
 export async function hasStoredSectionThumb(sectionId, section, filePath, variant) {
+	if (isVideoPath(filePath)) {
+		const { requestedVariant } = parseRequestedVideoVariant(variant);
+		const existing = await getStoredThumb(sectionId, filePath, requestedVariant);
+		if (existing) {
+			return true;
+		}
+		if (!section.thumbPath) {
+			return false;
+		}
+		return Boolean(getExistingDiskThumb(section.thumbPath, filePath, [".webp", ".jpg", ".jpeg", null]));
+	}
+
 	if (!section.thumbPath) {
 		const existing = await getStoredThumb(sectionId, filePath, variant);
 		return Boolean(existing);
@@ -502,18 +558,107 @@ async function ensureVideoThumb(section, filePath) {
 	};
 }
 
+async function ensureVideoThumbSet(sectionId, section, filePath, variant, frameIndex) {
+	const { baseVariant, requestedVariant, frameIndex: resolvedFrameIndex } =
+		parseRequestedVideoVariant(variant, frameIndex);
+	const cached = await getStoredThumb(sectionId, filePath, requestedVariant);
+	if (cached) {
+		return {
+			...cached,
+			source: `kvrocks:frame-${resolvedFrameIndex}`,
+		};
+	}
+
+	invariant(section.path, "section.path");
+	const fullPath = joinSectionPath(section.path, filePath);
+	const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "travel-photo-album-video-thumbs-"));
+	const width = getTargetWidthForVariant(baseVariant);
+
+	try {
+		await new Promise((resolve, reject) => {
+			new FfmpegCommand(fullPath)
+				.screenshots({
+					folder: tempDirectory,
+					filename: "frame-%i.jpg",
+					size: `${width}x?`,
+					timemarks: buildVideoTimemarks(),
+				})
+				.on("end", resolve)
+				.on("error", reject);
+		});
+
+		const generatedFiles = fs
+			.readdirSync(tempDirectory)
+			.filter((fileName) => fileName.endsWith(".jpg"))
+			.sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+		invariant(generatedFiles.length > 0, "ffmpeg did not generate video thumbnails");
+
+		let requestedThumb = null;
+		for (const [index, fileName] of generatedFiles.entries()) {
+			const generatedPath = path.join(tempDirectory, fileName);
+			const buffer = fs.readFileSync(generatedPath);
+			const metadata = await sharp(buffer).metadata();
+			const thumb = {
+				buffer,
+				mimeType: "image/jpeg",
+				width: metadata.width ?? width,
+				height: metadata.height ?? Math.round((width * 9) / 16),
+				dominantColor: await getDominantColorFromBuffer(buffer),
+			};
+			await storeThumb(sectionId, filePath, thumb, buildVideoFrameVariant(baseVariant, index));
+			if (index === resolvedFrameIndex) {
+				requestedThumb = thumb;
+			}
+		}
+
+		invariant(requestedThumb, "requested video thumbnail frame was not generated");
+		return {
+			...requestedThumb,
+			source: `generated:ffmpeg:${generatedFiles.length}`,
+		};
+	} catch (error) {
+		const fallback = await getStoredThumb(sectionId, filePath, requestedVariant);
+		if (fallback) {
+			return {
+				...fallback,
+				source: `kvrocks:frame-${resolvedFrameIndex}`,
+			};
+		}
+		throw error;
+	} finally {
+		fs.rmSync(tempDirectory, { recursive: true, force: true });
+	}
+}
+
+function buildVideoTimemarks() {
+	return Array.from({ length: videoThumbnailFrameCount }, (_, index) => {
+		const percentage = Math.min(95, Math.max(5, 5 + index * 10));
+		return `${percentage}%`;
+	});
+}
+
 export async function ensureSectionThumb(
 	sectionId,
 	section,
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
+	frameIndex,
 ) {
 	if (isVideoPath(filePath)) {
-		invariant(section.thumbPath, "section.thumbPath is required for video thumbnails");
-		return {
-			kind: "file",
-			...(await ensureVideoThumb(section, filePath)),
-		};
+		try {
+			return {
+				kind: "buffer",
+				...(await ensureVideoThumbSet(sectionId, section, filePath, variant, frameIndex)),
+			};
+		} catch (error) {
+			if (!section.thumbPath) {
+				throw error;
+			}
+			return {
+				kind: "file",
+				...(await ensureVideoThumb(section, filePath)),
+			};
+		}
 	}
 
 	if (!section.thumbPath) {

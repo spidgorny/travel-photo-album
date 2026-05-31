@@ -1,17 +1,12 @@
 "use client";
 
-import type {
-	CSSProperties,
-	ComponentType,
-	MouseEvent,
-	ReactNode,
-	WheelEvent,
-} from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import type { CSSProperties, ComponentType, MouseEvent, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Gallery from "react-photo-gallery";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
+import { PhashBitmap } from "./phash-bitmap";
+import { PhotoLightbox } from "./photo-lightbox";
 import type { FilesResponse, GalleryPhoto, MetaResponse } from "./ui-types";
 import { buildApiPath } from "./url-paths";
 import { Loading } from "./widget/loading";
@@ -20,7 +15,6 @@ interface GalleryOneDayProps {
 	sectionId: number;
 	folder: string;
 	date: string;
-	searchQuery?: string;
 }
 
 const FULLSCREEN_THUMB_VARIANT = "w1600-jpeg";
@@ -30,16 +24,22 @@ interface LightboxArgs {
 	index: number;
 }
 
+interface GroupedGalleryPhoto extends GalleryPhoto {
+	lightboxIndex: number;
+	groupedPhotoCount: number;
+	groupMemberIndices: number[];
+}
+
 interface ImageRendererProps {
 	index: number;
 	left: number;
 	top: number;
 	key?: string;
-	photo: GalleryPhoto;
+	photo: GroupedGalleryPhoto;
 }
 
 type PhotoGalleryComponentProps = {
-	photos: GalleryPhoto[];
+	photos: GroupedGalleryPhoto[];
 	direction?: "row" | "column";
 	margin?: number;
 	columns?: number | ((containerWidth: number) => number);
@@ -49,26 +49,20 @@ type PhotoGalleryComponentProps = {
 };
 
 const PhotoGallery = Gallery as unknown as ComponentType<PhotoGalleryComponentProps>;
+const MAX_SIMILAR_LOOKBACK = 3;
+const MAX_PHASH_DISTANCE = 28;
 
-export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: GalleryOneDayProps) {
-	const apiUrl = `${buildApiPath("/api/filesByDate", sectionId, folder, date)}${
-		searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ""
-	}`;
+export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
+	const apiUrl = buildApiPath("/api/filesByDate", sectionId, folder, date);
 	const { data } = useSWR<FilesResponse>(apiUrl, fetcher);
 
 	const [currentImage, setCurrentImage] = useState(0);
 	const [viewerIsOpen, setViewerIsOpen] = useState(false);
-
-	const openLightbox = useCallback(
-		(_event: MouseEvent<HTMLElement>, { index }: LightboxArgs) => {
-			setCurrentImage(index);
-			setViewerIsOpen(true);
-		},
-		[],
-	);
+	const [lightboxPhotoKeys, setLightboxPhotoKeys] = useState<string[]>([]);
 
 	const closeLightbox = useCallback(() => {
 		setCurrentImage(0);
+		setLightboxPhotoKeys([]);
 		setViewerIsOpen(false);
 	}, []);
 
@@ -95,6 +89,7 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 				height: typeof file.height === "number" && file.height > 0 ? file.height : 2,
 				caption: fileName,
 				description: typeof file.description === "string" ? file.description : undefined,
+				phash: typeof file.phash === "string" ? file.phash : undefined,
 				dominantColor:
 					typeof file.dominantColor === "string" && file.dominantColor
 						? file.dominantColor
@@ -108,7 +103,48 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 	}, [data, folder, sectionId]);
 
 	const [dimensions, setDimensions] = useState<GalleryPhoto[]>(photos);
-	const lastWheelNavigationAt = useRef(0);
+	const groupedPhotos = useMemo(
+		() => groupSequentialSimilarPhotos(dimensions),
+		[dimensions],
+	);
+	const lightboxPhotos = useMemo(() => {
+		if (!lightboxPhotoKeys.length) {
+			return dimensions;
+		}
+		const photosByKey = new Map(dimensions.map((photo) => [photo.key, photo]));
+		return lightboxPhotoKeys
+			.map((key) => photosByKey.get(key))
+			.filter((photo): photo is GalleryPhoto => Boolean(photo));
+	}, [dimensions, lightboxPhotoKeys]);
+
+	const openLightbox = useCallback(
+		(_event: MouseEvent<HTMLElement>, { photo, index }: LightboxArgs) => {
+			const lightboxIndex =
+				typeof (photo as GroupedGalleryPhoto).lightboxIndex === "number"
+					? (photo as GroupedGalleryPhoto).lightboxIndex
+					: index;
+			const groupedPhoto = photo as GroupedGalleryPhoto;
+			const memberIndices = Array.isArray(groupedPhoto.groupMemberIndices)
+				? groupedPhoto.groupMemberIndices
+				: [];
+			if (memberIndices.length > 1) {
+				const groupKeys = memberIndices
+					.map((memberIndex) => dimensions[memberIndex]?.key)
+					.filter((key): key is string => typeof key === "string");
+				const groupedKeySet = new Set(groupKeys);
+				const remainingKeys = dimensions
+					.map((item) => item.key)
+					.filter((key) => !groupedKeySet.has(key));
+				setLightboxPhotoKeys([...groupKeys, ...remainingKeys]);
+				setCurrentImage(0);
+			} else {
+				setLightboxPhotoKeys([]);
+				setCurrentImage(lightboxIndex);
+			}
+			setViewerIsOpen(true);
+		},
+		[dimensions],
+	);
 
 	const updatePhotoDescription = useCallback((photoKey: string, description?: string) => {
 		setDimensions((items) =>
@@ -121,65 +157,14 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 	}, []);
 
 	const showNextImage = useCallback(() => {
-		setCurrentImage((index) => (index < dimensions.length - 1 ? index + 1 : index));
-	}, [dimensions.length]);
+		setCurrentImage((index) => (index < lightboxPhotos.length - 1 ? index + 1 : index));
+	}, [lightboxPhotos.length]);
 
 	useEffect(() => {
 		setDimensions(photos);
 	}, [photos]);
 
-	const handleViewerWheel = useCallback(
-		(event: WheelEvent<HTMLDivElement>) => {
-			if (Math.abs(event.deltaY) < 12) {
-				return;
-			}
-
-			const now = Date.now();
-			if (now - lastWheelNavigationAt.current < 250) {
-				return;
-			}
-
-			lastWheelNavigationAt.current = now;
-			event.preventDefault();
-
-			if (event.deltaY > 0) {
-				showNextImage();
-				return;
-			}
-
-			showPreviousImage();
-		},
-		[showNextImage, showPreviousImage],
-	);
-
-	useEffect(() => {
-		if (!viewerIsOpen) {
-			return;
-		}
-
-		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
-				closeLightbox();
-				return;
-			}
-
-			if (event.key === "ArrowLeft") {
-				showPreviousImage();
-				return;
-			}
-
-			if (event.key === "ArrowRight") {
-				showNextImage();
-			}
-		};
-
-		window.addEventListener("keydown", handleKeyDown);
-		return () => {
-			window.removeEventListener("keydown", handleKeyDown);
-		};
-	}, [closeLightbox, showNextImage, showPreviousImage, viewerIsOpen]);
-
-	const currentPhoto = dimensions[currentImage] ?? null;
+	const currentPhoto = lightboxPhotos[currentImage] ?? null;
 	const currentMetaUrl =
 		viewerIsOpen && currentPhoto
 			? buildApiPath("/api/meta", sectionId, folder, currentPhoto.path)
@@ -189,6 +174,7 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 	});
 	const currentMetaDescription =
 		typeof currentMeta?.description === "string" ? currentMeta.description : undefined;
+	const currentMetaPhash = typeof currentMeta?.phash === "string" ? currentMeta.phash : undefined;
 
 	useEffect(() => {
 		if (!currentPhoto || currentMetaDescription === currentPhoto.description) {
@@ -196,6 +182,15 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 		}
 		updatePhotoDescription(currentPhoto.key, currentMetaDescription);
 	}, [currentMetaDescription, currentPhoto, updatePhotoDescription]);
+
+	useEffect(() => {
+		if (!currentPhoto || currentMetaPhash === currentPhoto.phash) {
+			return;
+		}
+		setDimensions((items) =>
+			items.map((item) => (item.key === currentPhoto.key ? { ...item, phash: currentMetaPhash } : item)),
+		);
+	}, [currentMetaPhash, currentPhoto]);
 
 	const imageRenderer = (props: ImageRendererProps) => {
 		const { index, left, top, key, photo } = props;
@@ -220,14 +215,14 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 					<Loading />
 				</div>
 			)}
-			{data && !dimensions.length && (
+			{data && !groupedPhotos.length && (
 				<div className="rounded-3xl border border-dashed border-white/10 bg-slate-950/40 px-4 py-8 text-center text-sm text-slate-400">
 					No photos matched this day.
 				</div>
 			)}
-			{!!dimensions.length && (
+			{!!groupedPhotos.length && (
 				<PhotoGallery
-					photos={dimensions}
+					photos={groupedPhotos}
 					direction="column"
 					columns={(containerWidth) => {
 						if (containerWidth >= 1800) return 6;
@@ -241,80 +236,111 @@ export function GalleryOneDay({ sectionId, folder, date, searchQuery = "" }: Gal
 					renderImage={imageRenderer}
 				/>
 			)}
-			{viewerIsOpen && currentPhoto && typeof document !== "undefined"
-				? createPortal(
-						<div
-							className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-1 backdrop-blur-sm"
-							onClick={closeLightbox}
-							role="presentation"
-						>
-							<div
-								className="relative flex h-[98vh] w-[98%] max-w-none flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 shadow-2xl shadow-black/50"
-								onClick={(event) => event.stopPropagation()}
-								role="dialog"
-								aria-modal="true"
-								aria-label={currentPhoto.caption ?? "Photo viewer"}
-							>
-								<div className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5">
-									<div className="min-w-0">
-										<div className="truncate text-sm font-medium text-white">
-											{currentPhoto.caption ?? "Photo"}
-										</div>
-										<div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">
-											{currentImage + 1} / {dimensions.length}
-										</div>
-									</div>
-									<button
-										type="button"
-										onClick={closeLightbox}
-										className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
-									>
-										Close
-									</button>
-								</div>
-								<div
-									className="relative flex min-h-0 flex-1 items-center justify-center bg-slate-950/80 p-2 sm:p-3"
-									onWheel={handleViewerWheel}
-								>
-									{currentImage > 0 ? (
-										<button
-											type="button"
-											onClick={showPreviousImage}
-											className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white transition hover:border-sky-300/40 hover:bg-slate-900"
-											aria-label="Previous image"
-										>
-											Prev
-										</button>
-									) : null}
-									<FullscreenImage key={currentPhoto.key} photo={currentPhoto} />
-									{currentImage < dimensions.length - 1 ? (
-										<button
-											type="button"
-											onClick={showNextImage}
-											className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white transition hover:border-sky-300/40 hover:bg-slate-900"
-											aria-label="Next image"
-										>
-											Next
-										</button>
-									) : null}
-								</div>
-								<div className="border-t border-white/10 px-4 py-3 sm:px-5">
-									<DescriptionEditor
-										sectionId={sectionId}
-										folder={folder}
-										photo={currentPhoto}
-										onSaved={(description) => {
-											updatePhotoDescription(currentPhoto.key, description);
-										}}
-									/>
-								</div>
-							</div>
-						</div>,
-						document.body,
-					)
-				: null}
+			<PhotoLightbox
+				photos={lightboxPhotos}
+				currentIndex={currentImage}
+				isOpen={viewerIsOpen && !!currentPhoto}
+				onClose={closeLightbox}
+				onPrevious={showPreviousImage}
+				onNext={showNextImage}
+				footer={
+					currentPhoto ? (
+						<DescriptionEditor
+							sectionId={sectionId}
+							folder={folder}
+							photo={currentPhoto}
+							onSaved={(description) => {
+								updatePhotoDescription(currentPhoto.key, description);
+							}}
+						/>
+					) : null
+				}
+			/>
 		</div>
 	);
+}
+
+function groupSequentialSimilarPhotos(photos: GalleryPhoto[]): GroupedGalleryPhoto[] {
+	if (!photos.length) {
+		return [];
+	}
+
+	const groups: {
+		representative: GalleryPhoto;
+		members: GalleryPhoto[];
+		memberIndices: number[];
+		startIndex: number;
+	}[] = [];
+
+	photos.forEach((photo, index) => {
+		const currentGroup = groups.at(-1);
+		if (!currentGroup) {
+			groups.push({
+				representative: photo,
+				members: [photo],
+				memberIndices: [index],
+				startIndex: index,
+			});
+			return;
+		}
+
+		if (shouldGroupWithPreviousPhotos(currentGroup.members, photo)) {
+			currentGroup.members.push(photo);
+			currentGroup.memberIndices.push(index);
+			return;
+		}
+
+		groups.push({
+			representative: photo,
+			members: [photo],
+			memberIndices: [index],
+			startIndex: index,
+		});
+	});
+
+	return groups.map(({ representative, members, memberIndices, startIndex }) => ({
+		...representative,
+		lightboxIndex: startIndex,
+		groupedPhotoCount: members.length,
+		groupMemberIndices: memberIndices,
+	}));
+}
+
+function shouldGroupWithPreviousPhotos(previousPhotos: GalleryPhoto[], currentPhoto: GalleryPhoto) {
+	const currentHash = normalizePhash(currentPhoto.phash);
+	if (!currentHash) {
+		return false;
+	}
+
+	const nearbyPhotos = previousPhotos.slice(-MAX_SIMILAR_LOOKBACK);
+	return nearbyPhotos.some((previousPhoto) => {
+		const previousHash = normalizePhash(previousPhoto.phash);
+		return previousHash ? hammingDistance(previousHash, currentHash) <= MAX_PHASH_DISTANCE : false;
+	});
+}
+
+function normalizePhash(value?: string) {
+	return typeof value === "string" && /^[0-9a-f]{16}$/i.test(value) ? value.toLowerCase() : null;
+}
+
+function hammingDistance(left: string, right: string) {
+	let distance = 0;
+	for (let index = 0; index < left.length; index += 1) {
+		const leftDigit = Number.parseInt(left[index], 16);
+		const rightDigit = Number.parseInt(right[index], 16);
+		distance += bitCount(leftDigit ^ rightDigit);
+	}
+	return distance;
+}
+
+function bitCount(value: number) {
+	let count = 0;
+	let remaining = value;
+	while (remaining > 0) {
+		count += remaining & 1;
+		remaining >>= 1;
+	}
+	return count;
 }
 
 interface DescriptionEditorProps {
@@ -399,7 +425,7 @@ function DescriptionEditor({ sectionId, folder, photo, onSaved }: DescriptionEdi
 
 interface SelectedImageProps {
 	index: number;
-	photo: GalleryPhoto;
+	photo: GroupedGalleryPhoto;
 	margin: string | number;
 	left: number;
 	top: number;
@@ -455,82 +481,18 @@ function SelectedImage({ index, photo, margin, left, top, selected, onClick }: S
 					style={{ backgroundColor: photo.dominantColor ?? "#0f172a", opacity: 0.9 }}
 				/>
 			) : null}
+			{photo.groupedPhotoCount > 1 ? (
+				<div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/15 bg-slate-950/85 px-2 py-1 text-[11px] font-medium text-white shadow-lg shadow-black/30">
+					{photo.groupedPhotoCount} similar
+				</div>
+			) : null}
 			<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent px-3 pb-3 pt-10">
+				<PhashBitmap value={photo.phash} className="absolute right-3 top-3" />
 				<div className="truncate text-sm font-medium text-white">{fileName}</div>
 				<div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-300/80">
 					{dimensionLabel ?? "Photo"}
 				</div>
 			</div>
-		</div>
-	);
-}
-
-function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
-	const [previewLoaded, setPreviewLoaded] = useState(false);
-	const [shouldLoadOriginal, setShouldLoadOriginal] = useState(false);
-	const [originalStatus, setOriginalStatus] = useState<"loading" | "loaded" | "error">(
-		"loading",
-	);
-
-	useEffect(() => {
-		setPreviewLoaded(false);
-		setShouldLoadOriginal(false);
-		setOriginalStatus("loading");
-	}, [photo.key, photo.source.regular]);
-
-	const fallbackSrc = photo.source.fullscreen ?? photo.source.thumbnail;
-
-	return (
-		<div
-		className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-2xl"
-			style={{ backgroundColor: photo.dominantColor ?? "#020617" }}
-		>
-			{originalStatus !== "loaded" ? (
-				<div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 bg-slate-800/80">
-					<div
-						className={[
-							"h-full transition-all duration-300",
-							originalStatus === "error"
-								? "w-full bg-red-500"
-								: "w-1/3 animate-pulse rounded-r-full bg-sky-400/90",
-						].join(" ")}
-					/>
-				</div>
-			) : null}
-			<img
-				src={fallbackSrc}
-				alt={photo.title ?? photo.caption}
-				onLoad={() => {
-					setPreviewLoaded(true);
-					setShouldLoadOriginal(true);
-				}}
-				onError={() => {
-					setPreviewLoaded(false);
-					setShouldLoadOriginal(true);
-				}}
-				className={[
-					"h-full w-full object-contain transition duration-300",
-					originalStatus === "loaded" ? "opacity-0" : "opacity-100",
-				].join(" ")}
-			/>
-			{shouldLoadOriginal ? (
-				<img
-					src={photo.source.regular}
-					alt={photo.title ?? photo.caption}
-					onLoad={() => setOriginalStatus("loaded")}
-					onError={() => setOriginalStatus("error")}
-					className={[
-						"absolute inset-0 h-full w-full object-contain transition duration-300",
-						originalStatus === "loaded" ? "opacity-100" : "opacity-0",
-					].join(" ")}
-				/>
-			) : null}
-			{!previewLoaded && !shouldLoadOriginal ? (
-				<div
-					className="pointer-events-none absolute inset-0 animate-pulse"
-					style={{ backgroundColor: photo.dominantColor ?? "#020617", opacity: 0.9 }}
-				/>
-			) : null}
 		</div>
 	);
 }

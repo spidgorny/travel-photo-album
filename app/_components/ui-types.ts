@@ -18,6 +18,7 @@ export interface FilesApiEntry {
 	height?: number;
 	dominantColor?: string;
 	description?: string;
+	phash?: string;
 	original?: {
 		width: number;
 		height: number;
@@ -75,6 +76,7 @@ export interface MetaResponse {
 	};
 	description?: string | null;
 	metaSearchKeys?: string[];
+	phash?: string;
 	[key: string]: unknown;
 }
 

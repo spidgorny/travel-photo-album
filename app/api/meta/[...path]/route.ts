@@ -14,6 +14,7 @@ import {
 	buildBasicFileMetaData,
 	buildImageMetaData,
 	normalizeStoredDescription,
+	normalizeStoredPhash,
 	readStoredMetaForFile,
 	updateStoredDescriptionForFile,
 } from "../../../../lib/file-meta";
@@ -199,6 +200,7 @@ async function readMetaFromStorage(
 		width: fileMeta.COMPUTED.Width,
 		height: fileMeta.COMPUTED.Height,
 		description: normalizeStoredDescription(fileMeta.description),
+		phash: normalizeStoredPhash(fileMeta.phash),
 	};
 }
 

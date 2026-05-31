@@ -19,6 +19,7 @@ import {
 import { ThumbQueue } from "../../../../lib/thumb-queue";
 import {
 	ensureSectionThumb,
+	defaultVideoThumbnailFrameIndex,
 	getMediaKind,
 } from "../../../../lib/thumb-store";
 import {
@@ -35,6 +36,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 	try {
 		const requestUrl = new URL(_request.url);
 		const variant = requestUrl.searchParams.get("variant") || undefined;
+		const frameIndex = normalizeFrameIndex(requestUrl.searchParams.get("frame"));
 		const { path: pathSegments = [] } = await params;
 		const [sectionId, ...filePath] = pathSegments;
 		const section = getSectionById(config.sections, sectionId);
@@ -55,6 +57,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 				section,
 				filePath,
 				variant,
+				frameIndex,
 			),
 			shouldWarmMetadata ? readStoredMetaForFile(section, filePath) : Promise.resolve(null),
 		]);
@@ -117,4 +120,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 function createStatEtag(stat: fs.Stats) {
 	return `"${stat.size}-${Math.trunc(stat.mtimeMs)}"`;
+}
+
+function normalizeFrameIndex(value: string | null) {
+	if (value === null) {
+		return defaultVideoThumbnailFrameIndex;
+	}
+	const parsed = Number(value);
+	return Number.isInteger(parsed) ? parsed : defaultVideoThumbnailFrameIndex;
 }

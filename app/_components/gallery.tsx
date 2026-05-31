@@ -1,11 +1,12 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import { FolderInfoSidebar } from "./folder-info-sidebar";
 import { GalleryOneDay } from "./gallery-one-day";
+import { buildDayAnchorId, createGoogleMapsHref } from "./url-paths";
 import type { DatesResponse, DaySummary, UISection } from "./ui-types";
 import { Loading } from "./widget/loading";
 
@@ -19,18 +20,12 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const requestedPage = normalizePageNumber(searchParams.get("page"));
-	const searchQuery = normalizeSearchQuery(searchParams.get("q"));
-	const [searchInput, setSearchInput] = useState(searchQuery);
 	const apiUrl =
 		requestedPage > 1
-			? `/api/dates/${section.id}/${folder}?page=${requestedPage}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`
-			: `/api/dates/${section.id}/${folder}${searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ""}`;
+			? `/api/dates/${section.id}/${folder}?page=${requestedPage}`
+			: `/api/dates/${section.id}/${folder}`;
 	const { data } = useSWR<DatesResponse>(apiUrl, fetcher);
 	const [isFolderInfoOpen, setIsFolderInfoOpen] = useState(false);
-
-	useEffect(() => {
-		setSearchInput(searchQuery);
-	}, [searchQuery]);
 
 	if (!data) {
 		return (
@@ -62,9 +57,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 	if (!dates.length) {
 		return (
 			<div className="flex min-h-[16rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-900/40 px-6 text-center text-sm text-slate-400">
-				{searchQuery
-					? "No photos matched this description search in the current folder."
-					: "No dated photos were found in this folder yet."}
+				No dated photos were found in this folder yet.
 			</div>
 		);
 	}
@@ -97,63 +90,6 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 						<p className="text-sm text-slate-400">
 							Photos are grouped by capture day for quick scanning.
 						</p>
-						<div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-							<input
-								type="search"
-								value={searchInput}
-								onChange={(event) => setSearchInput(event.target.value)}
-								onKeyDown={(event) => {
-									if (event.key === "Enter") {
-										router.push(
-											createGalleryPageHref({
-												pathname,
-												searchParams,
-												page: 1,
-												searchQuery: searchInput,
-											}),
-										);
-									}
-								}}
-								placeholder="Search image descriptions"
-								className="w-full rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/50 sm:max-w-sm"
-							/>
-							<div className="flex items-center gap-2">
-								<button
-									type="button"
-									onClick={() =>
-										router.push(
-											createGalleryPageHref({
-												pathname,
-												searchParams,
-												page: 1,
-												searchQuery: searchInput,
-											}),
-										)
-									}
-									className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-200 transition hover:border-sky-300/30 hover:text-white"
-								>
-									Search
-								</button>
-								{searchQuery ? (
-									<button
-										type="button"
-										onClick={() =>
-											router.push(
-												createGalleryPageHref({
-													pathname,
-													searchParams,
-													page: 1,
-													searchQuery: "",
-												}),
-											)
-										}
-										className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
-									>
-										Clear
-									</button>
-								) : null}
-							</div>
-						</div>
 					</div>
 					<div className="text-sm text-slate-400">
 						{pagination.totalPages > 1
@@ -173,7 +109,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 					/>
 				) : null}
 				{dates.map(({ date, count, locations }) => {
-					const anchorId = getDayAnchorId(date);
+					const anchorId = buildDayAnchorId(date);
 					return (
 						<section
 							id={anchorId}
@@ -186,31 +122,33 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 									<p className="text-sm text-slate-400">
 										{count} photo{count === 1 ? "" : "s"}
 									</p>
-									{locations.length ? (
-										<div className="mt-2 flex flex-wrap gap-2">
-											{locations.slice(0, MAX_LOCATION_LABELS).map((location) => (
-												<span
-													key={`${date}:${location}`}
-													className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2.5 py-1 text-xs font-medium text-sky-100"
-												>
-													{location}
-												</span>
-											))}
-											{locations.length > MAX_LOCATION_LABELS ? (
-												<span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-slate-300">
-													+{locations.length - MAX_LOCATION_LABELS} more
-												</span>
-											) : null}
-										</div>
-									) : null}
 								</div>
+								{locations.length ? (
+									<div className="flex flex-wrap gap-2 sm:justify-end">
+										{locations.slice(0, MAX_LOCATION_LABELS).map((location) => (
+											<a
+												key={`${date}:${location}`}
+												href={createGoogleMapsHref(location)}
+												target="_blank"
+												rel="noreferrer"
+												className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2.5 py-1 text-xs font-medium text-sky-100 transition hover:border-sky-200/40 hover:bg-sky-300/20 hover:text-white"
+											>
+												{location}
+											</a>
+										))}
+										{locations.length > MAX_LOCATION_LABELS ? (
+											<span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-slate-300">
+												+{locations.length - MAX_LOCATION_LABELS} more
+											</span>
+										) : null}
+									</div>
+								) : null}
 							</div>
 							{!isSSR && (
 								<GalleryOneDay
 									sectionId={section.id}
 									folder={folder}
 									date={date}
-									searchQuery={searchQuery}
 								/>
 							)}
 						</section>
@@ -229,8 +167,8 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 				) : null}
 			</div>
 
-			<aside className="hidden xl:block">
-				<div className="rounded-[1.5rem] border border-white/10 bg-slate-950/55 p-3 shadow-xl shadow-black/20">
+			<aside className="hidden self-start xl:sticky xl:top-5 xl:block">
+				<div className="max-h-[calc(100vh-2.5rem)] overflow-y-auto rounded-[1.5rem] border border-white/10 bg-slate-950/55 p-3 shadow-xl shadow-black/20">
 					<div className="px-2 pb-3">
 						<div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
 							Days
@@ -241,7 +179,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 						{dates.map(({ date, count }) => (
 							<a
 								key={`jump:${date}`}
-								href={`#${getDayAnchorId(date)}`}
+								href={`#${buildDayAnchorId(date)}`}
 								className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-slate-300 transition hover:border-sky-300/30 hover:bg-sky-300/10 hover:text-white"
 							>
 								<span className="font-medium">{formatDateJumpLabel(date)}</span>
@@ -348,10 +286,6 @@ function normalizeDaySummary(summary: number | DaySummary | undefined) {
 	};
 }
 
-function getDayAnchorId(date: string) {
-	return `day-${date}`;
-}
-
 function formatDateJumpLabel(date: string) {
 	const compactMatch = date.match(/^\d{4}\d{2}(\d{2})$/);
 	if (compactMatch) {
@@ -375,12 +309,10 @@ function createGalleryPageHref({
 	pathname,
 	searchParams,
 	page,
-	searchQuery,
 }: {
 	pathname: string;
 	searchParams: ReturnType<typeof useSearchParams>;
 	page: number;
-	searchQuery?: string;
 }) {
 	const nextSearchParams = new URLSearchParams(searchParams.toString());
 	if (page <= 1) {
@@ -388,18 +320,9 @@ function createGalleryPageHref({
 	} else {
 		nextSearchParams.set("page", String(page));
 	}
-	const normalizedSearchQuery = normalizeSearchQuery(searchQuery ?? nextSearchParams.get("q"));
-	if (normalizedSearchQuery) {
-		nextSearchParams.set("q", normalizedSearchQuery);
-	} else {
-		nextSearchParams.delete("q");
-	}
+	nextSearchParams.delete("q");
 	const queryString = nextSearchParams.toString();
 	return queryString ? `${pathname}?${queryString}` : pathname;
-}
-
-function normalizeSearchQuery(value: string | null | undefined) {
-	return value?.trim() ?? "";
 }
 
 function getVisiblePageItems(currentPage: number, totalPages: number) {

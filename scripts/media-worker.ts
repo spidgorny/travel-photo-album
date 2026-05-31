@@ -66,6 +66,13 @@ function formatEta(totalSeconds) {
 	return `${seconds}s`;
 }
 
+function formatJobFilePath(filePath) {
+	if (Array.isArray(filePath)) {
+		return filePath.join("/") || "unknown";
+	}
+	return typeof filePath === "string" && filePath.length > 0 ? filePath : "unknown";
+}
+
 worker.on("ready", () => {
 	console.log(
 		`BullMQ worker ready on queue ${mediaQueuePrefix}:${mediaQueueName} (concurrency ${getWorkerConcurrency()})`,
@@ -75,7 +82,9 @@ worker.on("ready", () => {
 	});
 });
 
-worker.on("completed", () => {
+worker.on("completed", (job, result) => {
+	const filePath = formatJobFilePath(result?.filePath || job?.data?.filePath);
+	console.log(`completed ${job?.id ?? "unknown"} ${filePath}`);
 	processedThisRun += 1;
 	void logQueueDepth().catch((error) => {
 		console.error(`queue depth failed ${error.message}`);
@@ -84,7 +93,8 @@ worker.on("completed", () => {
 
 worker.on("failed", (job, error) => {
 	const jobName = job ? resolveMediaJobName(job.name, job.data) : "unknown";
-	console.error(`failed ${job?.id ?? "unknown"} ${jobName} ${error.message}`);
+	const filePath = formatJobFilePath(job?.data?.filePath);
+	console.error(`failed ${job?.id ?? "unknown"} ${jobName} ${filePath} ${error.message}`);
 	processedThisRun += 1;
 	void logQueueDepth().catch((queueError) => {
 		console.error(`queue depth failed ${queueError.message}`);

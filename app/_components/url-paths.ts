@@ -1,5 +1,3 @@
-"use client";
-
 function encodePathValue(value: string | number) {
 	return String(value)
 		.split("/")
@@ -20,4 +18,16 @@ export function buildHomeHref(sectionId: number, folderPath?: string) {
 		query.set("folder", folderPath);
 	}
 	return `/?${query.toString()}`;
+}
+
+export function buildDayAnchorId(date: string) {
+	return `day-${date}`;
+}
+
+export function buildHomeDayHref(sectionId: number, folderPath: string | undefined, date: string) {
+	return `${buildHomeHref(sectionId, folderPath)}#${buildDayAnchorId(date)}`;
+}
+
+export function createGoogleMapsHref(location: string) {
+	return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
 }

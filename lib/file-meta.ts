@@ -19,6 +19,8 @@ import type { ThumbImageMetaData } from "./thumb-jobs.ts";
 
 export type DirectoryMetaData = Record<string, StoredDirectoryMetaEntry>;
 const fallbackDimensions = { width: 3, height: 2 };
+const phashSize = 8;
+const phashSampleSize = 32;
 
 const locationCache = new Map<string, FileLocationLabel | null>();
 
@@ -188,6 +190,14 @@ export function normalizeStoredDescription(value: unknown): string | undefined {
 	return normalized.length ? normalized : undefined;
 }
 
+export function normalizeStoredPhash(value: unknown): string | undefined {
+	if (typeof value !== "string") {
+		return undefined;
+	}
+	const normalized = value.trim().toLowerCase();
+	return /^[0-9a-f]{16}$/.test(normalized) ? normalized : undefined;
+}
+
 export async function updateStoredDescriptionForFile(
 	section: ConfigSection,
 	filePath: string[],
@@ -218,6 +228,7 @@ export async function buildImageMetaData(
 	const location = gps ? reverseGeocodeLocation(gps) : null;
 	const existingMeta = await readStoredMetaForFile(section, filePath);
 	const description = normalizeStoredDescription(existingMeta?.description);
+	const phash = (await buildPerceptualHash(fullPath)) ?? normalizeStoredPhash(existingMeta?.phash);
 
 	return {
 		FileName: path.basename(fullPath),
@@ -229,6 +240,7 @@ export async function buildImageMetaData(
 		},
 		dimensions,
 		...(description ? { description } : {}),
+		...(phash ? { phash } : {}),
 		...(gps ? { GPS: gps } : {}),
 		...(location ? { location } : {}),
 	};
@@ -342,4 +354,70 @@ function reverseGeocodeLocation(gps: FileGpsCoordinates): FileLocationLabel | nu
 		locationCache.set(cacheKey, null);
 		return null;
 	}
+}
+
+async function buildPerceptualHash(fullPath: string): Promise<string | null> {
+	try {
+		const buffer = await sharp(fullPath)
+			.rotate()
+			.resize(phashSampleSize, phashSampleSize, { fit: "fill" })
+			.grayscale()
+			.raw()
+			.toBuffer();
+		const matrix = new Array(phashSampleSize)
+			.fill(null)
+			.map((_, rowIndex) =>
+				new Array(phashSampleSize)
+					.fill(0)
+					.map((__, columnIndex) => buffer[rowIndex * phashSampleSize + columnIndex] ?? 0),
+			);
+		const coefficients = discreteCosineTransform(matrix, phashSize);
+		const values = coefficients.flat();
+		const threshold = median(values.slice(1));
+		const bits = values.map((value) => (value > threshold ? "1" : "0")).join("");
+		return bitsToHex(bits);
+	} catch {
+		return null;
+	}
+}
+
+function discreteCosineTransform(matrix: number[][], sampleCount: number) {
+	const sourceSize = matrix.length;
+	const result = Array.from({ length: sampleCount }, () => Array(sampleCount).fill(0));
+
+	for (let u = 0; u < sampleCount; u += 1) {
+		for (let v = 0; v < sampleCount; v += 1) {
+			let sum = 0;
+			for (let i = 0; i < sourceSize; i += 1) {
+				for (let j = 0; j < sourceSize; j += 1) {
+					sum +=
+						matrix[i][j] *
+						Math.cos(((2 * i + 1) * u * Math.PI) / (2 * sourceSize)) *
+						Math.cos(((2 * j + 1) * v * Math.PI) / (2 * sourceSize));
+				}
+			}
+			const alphaU = u === 0 ? Math.SQRT1_2 : 1;
+			const alphaV = v === 0 ? Math.SQRT1_2 : 1;
+			result[u][v] = (0.25 * alphaU * alphaV * sum) / sourceSize;
+		}
+	}
+
+	return result;
+}
+
+function median(values: number[]) {
+	const sorted = [...values].sort((left, right) => left - right);
+	const middle = Math.floor(sorted.length / 2);
+	if (sorted.length % 2 === 0) {
+		return (sorted[middle - 1] + sorted[middle]) / 2;
+	}
+	return sorted[middle];
+}
+
+function bitsToHex(bits: string) {
+	let hex = "";
+	for (let index = 0; index < bits.length; index += 4) {
+		hex += Number.parseInt(bits.slice(index, index + 4), 2).toString(16);
+	}
+	return hex;
 }

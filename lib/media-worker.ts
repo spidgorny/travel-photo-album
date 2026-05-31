@@ -13,6 +13,7 @@ import {
 	normalizeStoredDescription,
 	readStoredMetaForFile,
 	writeStoredMetaForFile,
+	normalizeStoredPhash,
 } from "./file-meta.ts";
 import { isAutoDescriptionEnabled } from "./image-description.ts";
 import {
@@ -212,23 +213,31 @@ if (!(payload?.force ?? false)) {
 		readStoredMetaForFile(section, filePath),
 	]);
 	const hasDescription = Boolean(normalizeStoredDescription(storedMeta?.description));
+	const hasPhash = Boolean(normalizeStoredPhash(storedMeta?.phash));
 	const needsDescription =
 		mediaKind === "image" && isDescriptionQueueConfigured() && !hasDescription;
+	const needsPhash = mediaKind === "image" && !hasPhash;
+	if (hasThumb && storedMeta && needsPhash) {
+		const metaData = await buildImageMetaData(section, filePath);
+		await writeStoredMetaForFile(section, filePath, metaData);
+	}
 	if (hasThumb && storedMeta && needsDescription) {
 		await enqueueImageDescription(sectionId, section, filePath, variant, false);
 		return {
 			action: mediaJobNames.warmSectionFile,
 			filePath: filePath.join("/"),
 			queuedDescription: true,
-			reason: "missing-description",
+			refreshedPhash: needsPhash,
+			reason: needsPhash ? "missing-phash-and-description" : "missing-description",
 		};
 	}
 	if (hasThumb && storedMeta && !needsDescription) {
 		return {
 			action: mediaJobNames.warmSectionFile,
 			filePath: filePath.join("/"),
-			skipped: true,
-			reason: "already-indexed",
+			skipped: !needsPhash,
+			refreshedPhash: needsPhash,
+			reason: needsPhash ? "missing-phash" : "already-indexed",
 		};
 	}
 }

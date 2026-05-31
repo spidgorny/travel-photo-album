@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import invariant from "tiny-invariant";
 import config from "../../../../lib/config";
 import { isValidDate } from "../../../../lib/date";
-import { readStoredMetaForFile } from "../../../../lib/file-meta";
+import { normalizeStoredPhash, readStoredMetaForFile } from "../../../../lib/file-meta";
 import { formatDayKey, getFileDates, parseDayKey } from "../../../../lib/files";
 import { getImageDimensions } from "../../../../lib/thumb-store";
 
@@ -48,6 +48,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 					height: dimensions.height,
 					dominantColor: dimensions.dominantColor,
 					description: normalizeDescription(storedMeta?.description),
+					phash: normalizeStoredPhash(storedMeta?.phash),
 					original: {
 						width: dimensions.width,
 						height: dimensions.height,
