@@ -111,9 +111,10 @@ services:
       THUMB_KV_PREFIX: ${THUMB_KV_PREFIX:-travel-photo-album:thumb:v1}
       THUMB_TARGET_WIDTH: ${THUMB_TARGET_WIDTH:-256}
       REDIS_FOLDER_CACHE_TTL_SECONDS: ${REDIS_FOLDER_CACHE_TTL_SECONDS:-0}
-      OLLAMA_BASE_URL: ${DESCRIPTION_WORKER_OLLAMA_BASE_URL:-http://127.0.0.1:11434}
+      OLLAMA_BASE_URL: ${DESCRIPTION_WORKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-}
       OLLAMA_CAPTION_PROMPT: ${OLLAMA_CAPTION_PROMPT:-}
+      DESCRIPTION_WORKER_EMBEDDED_OLLAMA: ${DESCRIPTION_WORKER_EMBEDDED_OLLAMA:-0}
       TYPESENSE_PROTOCOL: ${DESCRIPTION_WORKER_TYPESENSE_PROTOCOL:-${TYPESENSE_PROTOCOL:-http}}
       TYPESENSE_HOST: ${DESCRIPTION_WORKER_TYPESENSE_HOST:-typesense}
       TYPESENSE_PORT: ${DESCRIPTION_WORKER_TYPESENSE_PORT:-${TYPESENSE_PORT:-8108}}
@@ -127,6 +128,8 @@ services:
         source: ${MEDIA_ROOT_HOST_PATH:-/Volumes/photo}
         target: ${MEDIA_ROOT_CONTAINER_PATH:-/media/nas/photo}
         read_only: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     develop:
       watch:
         - action: sync+restart

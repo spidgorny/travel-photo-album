@@ -198,6 +198,8 @@ Important defaults from `.env.example`:
 - `DESCRIPTION_WORKER_LOCK_DURATION_MS` controls how long the description worker keeps a BullMQ job lock before renewal; increase it for slow Ollama caption jobs
 - `DESCRIPTION_QUEUE_URL` controls the dedicated description queue
 - `OLLAMA_BASE_URL` and `OLLAMA_MODEL` control auto-generated descriptions
+- `DESCRIPTION_WORKER_OLLAMA_BASE_URL` defaults the Docker description worker to `http://host.docker.internal:11434` so it can use Ollama running on the host
+- `DESCRIPTION_WORKER_EMBEDDED_OLLAMA=1` re-enables the fallback Ollama daemon inside the `description-worker` container if you need it
 - `MEDIA_ROOT_HOST_PATH` maps your host media path into Docker worker containers
 
 ### 4. Start the app
@@ -233,6 +235,8 @@ docker compose watch media-worker
 docker compose watch description-worker
 docker compose watch search-indexer
 ```
+
+By default the Docker `description-worker` talks to **host Ollama** via `host.docker.internal`, which lets macOS use Metal/GPU acceleration outside Docker. The image still contains the fallback embedded Ollama path; set `DESCRIPTION_WORKER_EMBEDDED_OLLAMA=1` if you want the container to start its own Ollama daemon instead.
 
 ## Core workflows
 
