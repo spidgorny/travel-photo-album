@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import { AppHeader } from "../_components/app-header";
@@ -19,6 +20,17 @@ const queueStateLabels: Array<keyof QueueCounts> = [
 	"completed",
 	"failed",
 ];
+
+type QueueThroughputMetrics = {
+	windowMs: number;
+	processedDelta: number;
+	jobsPerMinute: number | null;
+};
+
+type QueueBaseline = {
+	observedAtMs: number;
+	processed: number;
+};
 
 export function QueueDashboard({
 	sections,
@@ -40,6 +52,48 @@ export function QueueDashboard({
 		...singleQueue,
 		stats: summarizeQueue(singleQueue),
 	}));
+	const baselineRef = useRef<Record<string, QueueBaseline>>({});
+	const [throughputByQueue, setThroughputByQueue] = useState<Record<string, QueueThroughputMetrics>>({});
+
+	useEffect(() => {
+		const observedAtMs = Date.parse(snapshot.updatedAt);
+		if (!Number.isFinite(observedAtMs)) {
+			return;
+		}
+
+		const next: Record<string, QueueThroughputMetrics> = {};
+		const entries: Array<{ key: string; processed: number }> = [
+			{ key: "__all__", processed: queue.totalProcessed },
+			...(queue.queues ?? []).map((singleQueue) => ({
+				key: singleQueue.label,
+				processed: getProcessedCount(singleQueue.counts),
+			})),
+		];
+
+		for (const entry of entries) {
+			const baseline = baselineRef.current[entry.key];
+			if (!baseline || entry.processed < baseline.processed || observedAtMs <= baseline.observedAtMs) {
+				baselineRef.current[entry.key] = {
+					observedAtMs,
+					processed: entry.processed,
+				};
+				next[entry.key] = emptyThroughputMetrics();
+				continue;
+			}
+
+			const processedDelta = entry.processed - baseline.processed;
+			const windowMs = observedAtMs - baseline.observedAtMs;
+			next[entry.key] = {
+				windowMs,
+				processedDelta,
+				jobsPerMinute:
+					windowMs > 0 ? (processedDelta / windowMs) * 60_000 : null,
+			};
+		}
+
+		setThroughputByQueue(next);
+	}, [queue, snapshot.updatedAt]);
+
 	const contextValue = queue.configured
 		? `${overallStats.totalQueued} queued across ${Math.max(queue.queues?.length ?? 0, 1)} queue${(queue.queues?.length ?? 0) === 1 ? "" : "s"}`
 		: "Queue processing is not configured";
@@ -59,6 +113,9 @@ export function QueueDashboard({
 							<h2 className="text-2xl font-semibold text-white">Queue details</h2>
 							<p className="mt-2 text-sm text-slate-400">
 								Live queue snapshots for media thumbnail jobs and image description jobs.
+							</p>
+							<p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
+								Jobs/minute is measured from page snapshots. Time/job is averaged from preserved successful jobs in BullMQ.
 							</p>
 						</div>
 						<div className="text-sm text-slate-400">
@@ -95,6 +152,8 @@ export function QueueDashboard({
 											<th className="px-4 py-3 text-right">Failed</th>
 											<th className="px-4 py-3 text-right">Processed</th>
 											<th className="px-4 py-3 text-right">Success</th>
+											<th className="px-4 py-3 text-right">Jobs/min</th>
+											<th className="px-4 py-3 text-right">Avg success time</th>
 										</tr>
 									</thead>
 									<tbody className="divide-y divide-white/5 text-slate-200">
@@ -103,6 +162,9 @@ export function QueueDashboard({
 											configured={queue.configured}
 											counts={queue.counts}
 											stats={overallStats}
+											throughput={throughputByQueue.__all__ ?? emptyThroughputMetrics()}
+											averageSuccessfulJobTimeMs={queue.averageSuccessfulJobTimeMs}
+											sampledSuccessfulJobs={queue.sampledSuccessfulJobs}
 										/>
 										{perQueueStats.map((singleQueue) => (
 											<QueueRow
@@ -111,6 +173,9 @@ export function QueueDashboard({
 												configured={singleQueue.configured}
 												counts={singleQueue.counts}
 												stats={singleQueue.stats}
+												throughput={throughputByQueue[singleQueue.label] ?? emptyThroughputMetrics()}
+												averageSuccessfulJobTimeMs={singleQueue.averageSuccessfulJobTimeMs}
+												sampledSuccessfulJobs={singleQueue.sampledSuccessfulJobs}
 											/>
 										))}
 									</tbody>
@@ -231,11 +296,17 @@ function QueueRow({
 	configured,
 	counts,
 	stats,
+	throughput,
+	averageSuccessfulJobTimeMs,
+	sampledSuccessfulJobs,
 }: {
 	label: string;
 	configured: boolean;
 	counts: QueueCounts;
 	stats: ReturnType<typeof summarizeQueue>;
+	throughput: QueueThroughputMetrics;
+	averageSuccessfulJobTimeMs: number | null;
+	sampledSuccessfulJobs: number;
 }) {
 	return (
 		<tr>
@@ -249,6 +320,10 @@ function QueueRow({
 			<td className="px-4 py-3 text-right">{formatNumber(counts.failed)}</td>
 			<td className="px-4 py-3 text-right">{formatNumber(stats.totalProcessed)}</td>
 			<td className="px-4 py-3 text-right">{formatPercent(stats.successRate)}</td>
+			<td className="px-4 py-3 text-right">{formatJobsPerMinute(throughput.jobsPerMinute)}</td>
+			<td className="px-4 py-3 text-right" title={formatSampleTitle(sampledSuccessfulJobs)}>
+				{formatDuration(averageSuccessfulJobTimeMs)}
+			</td>
 		</tr>
 	);
 }
@@ -282,6 +357,48 @@ function formatPercent(value: number | null) {
 		return "--";
 	}
 	return `${value.toFixed(1)}%`;
+}
+
+function formatJobsPerMinute(value: number | null) {
+	if (value === null || Number.isNaN(value)) {
+		return "--";
+	}
+	return value.toFixed(2);
+}
+
+function formatDuration(value: number | null) {
+	if (value === null || Number.isNaN(value)) {
+		return "--";
+	}
+	if (value < 1000) {
+		return `${Math.round(value)}ms`;
+	}
+	const seconds = value / 1000;
+	if (seconds < 60) {
+		return `${seconds.toFixed(1)}s`;
+	}
+	const minutes = Math.floor(seconds / 60);
+	const remainingSeconds = seconds - minutes * 60;
+	return `${minutes}m ${remainingSeconds.toFixed(0)}s`;
+}
+
+function getProcessedCount(counts: QueueCounts) {
+	return counts.completed + counts.failed;
+}
+
+function emptyThroughputMetrics(): QueueThroughputMetrics {
+	return {
+		windowMs: 0,
+		processedDelta: 0,
+		jobsPerMinute: null,
+	};
+}
+
+function formatSampleTitle(sampledSuccessfulJobs: number) {
+	if (sampledSuccessfulJobs <= 0) {
+		return "No completed jobs available";
+	}
+	return `Average from ${sampledSuccessfulJobs} preserved successful jobs`;
 }
 
 function formatTimestamp(value: string) {

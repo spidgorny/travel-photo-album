@@ -99,6 +99,8 @@ export interface QueueInfo {
 	counts: QueueCounts;
 	totalQueued: number;
 	totalProcessed: number;
+	averageSuccessfulJobTimeMs: number | null;
+	sampledSuccessfulJobs: number;
 	queues?: Array<{
 		label: "media" | "description";
 		configured: boolean;
@@ -106,6 +108,8 @@ export interface QueueInfo {
 		name: string;
 		prefix: string;
 		counts: QueueCounts;
+		averageSuccessfulJobTimeMs: number | null;
+		sampledSuccessfulJobs: number;
 	}>;
 }
 

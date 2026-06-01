@@ -19,6 +19,11 @@ const queueCountTypes = [
 
 type QueueCounts = Record<(typeof queueCountTypes)[number], number>;
 
+type QueueTimingStats = {
+	averageSuccessfulJobTimeMs: number | null;
+	sampledSuccessfulJobs: number;
+};
+
 export async function getQueueInfo() {
 	const [thumbQueue, descriptionQueue] = await Promise.all([
 		getThumbQueue(),
@@ -53,6 +58,8 @@ export async function getQueueInfo() {
 			counts: emptyQueueCounts(),
 			totalQueued: 0,
 			totalProcessed: 0,
+			averageSuccessfulJobTimeMs: null,
+			sampledSuccessfulJobs: 0,
 			queues: [],
 		};
 	}
@@ -79,6 +86,7 @@ export async function getQueueInfo() {
 			(counts.delayed ?? 0) +
 			(counts.paused ?? 0),
 		totalProcessed: (counts.completed ?? 0) + (counts.failed ?? 0),
+		...mergeQueueTimingStats(queueInfos),
 		queues: queueInfos,
 	};
 }
@@ -105,11 +113,16 @@ async function getSingleQueueInfo({
 					name,
 					prefix,
 					counts: emptyQueueCounts(),
+					averageSuccessfulJobTimeMs: null,
+					sampledSuccessfulJobs: 0,
 			  }
 			: null;
 	}
 
-	const counts = await queue.getJobCounts(...queueCountTypes);
+	const [counts, timingStats] = await Promise.all([
+		queue.getJobCounts(...queueCountTypes),
+		getQueueTimingStats(queue),
+	]);
 	return {
 		label,
 		configured: true,
@@ -124,6 +137,61 @@ async function getSingleQueueInfo({
 			failed: counts.failed ?? 0,
 			paused: counts.paused ?? 0,
 		},
+		...timingStats,
+	};
+}
+
+async function getQueueTimingStats(queue: Queue): Promise<QueueTimingStats> {
+	const completedJobs = await queue.getJobs(["completed"], 0, 999, false);
+	let totalDurationMs = 0;
+	let sampledSuccessfulJobs = 0;
+
+	for (const job of completedJobs) {
+		if (
+			typeof job.processedOn !== "number" ||
+			typeof job.finishedOn !== "number" ||
+			job.finishedOn < job.processedOn
+		) {
+			continue;
+		}
+
+		totalDurationMs += job.finishedOn - job.processedOn;
+		sampledSuccessfulJobs += 1;
+	}
+
+	return {
+		averageSuccessfulJobTimeMs:
+			sampledSuccessfulJobs > 0 ? totalDurationMs / sampledSuccessfulJobs : null,
+		sampledSuccessfulJobs,
+	};
+}
+
+function mergeQueueTimingStats(
+	queueInfos: Array<{
+		averageSuccessfulJobTimeMs: number | null;
+		sampledSuccessfulJobs: number;
+	}>,
+): QueueTimingStats {
+	let totalDurationMs = 0;
+	let sampledSuccessfulJobs = 0;
+
+	for (const queueInfo of queueInfos) {
+		if (
+			queueInfo.averageSuccessfulJobTimeMs === null ||
+			queueInfo.sampledSuccessfulJobs <= 0
+		) {
+			continue;
+		}
+
+		totalDurationMs +=
+			queueInfo.averageSuccessfulJobTimeMs * queueInfo.sampledSuccessfulJobs;
+		sampledSuccessfulJobs += queueInfo.sampledSuccessfulJobs;
+	}
+
+	return {
+		averageSuccessfulJobTimeMs:
+			sampledSuccessfulJobs > 0 ? totalDurationMs / sampledSuccessfulJobs : null,
+		sampledSuccessfulJobs,
 	};
 }
 
