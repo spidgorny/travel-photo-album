@@ -5,9 +5,11 @@ import path from "node:path";
 import config, { type ConfigSection } from "./config.ts";
 import {
 	listStoredMetaFilePaths,
+	readStoredFaceDataForFile,
 	readStoredMetaDirectory,
+	readStoredMetaForFile,
 } from "./file-meta.ts";
-import type { StoredDirectoryMetaEntry } from "./files-types.ts";
+import type { StoredDirectoryMetaEntry, StoredFaceMetadata } from "./files-types.ts";
 import { formatDayKey, getFileDate } from "./files.ts";
 
 export interface SearchSection extends ConfigSection {
@@ -34,6 +36,7 @@ interface SearchIndexEntryInput {
 	filePath: string;
 	fileName: string;
 	description: string;
+	personNames: string[];
 	locationLabel: string;
 	locality: string;
 	countryName: string;
@@ -112,6 +115,7 @@ export interface RebuildSearchIndexProgress {
 }
 
 const SEARCH_QUERY_FIELDS = [
+	"person_names",
 	"description",
 	"location_label",
 	"locality",
@@ -209,6 +213,21 @@ function trimString(value: unknown) {
 	return readString(value).trim();
 }
 
+function trimStringArray(value: unknown) {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+
+	return [
+		...new Set(
+			value
+				.filter((candidate): candidate is string => typeof candidate === "string")
+				.map((candidate) => candidate.trim())
+				.filter((candidate) => candidate.length > 0),
+		),
+	];
+}
+
 function buildFolderKey(folder: string) {
 	return sha1(folder);
 }
@@ -244,9 +263,10 @@ function buildSearchEntryInput(
 	fallbackDate?: string,
 ): SearchIndexEntryInput | null {
 	const record = fileMeta as Record<string, unknown>;
+	const personNames = buildPersonNames(fileMeta, record);
 	const description = trimString(fileMeta.description);
 	const locationLabel = buildLocationLabel(fileMeta);
-	if (!description && !locationLabel) {
+	if (personNames.length === 0 && !description && !locationLabel) {
 		return null;
 	}
 
@@ -265,6 +285,7 @@ function buildSearchEntryInput(
 		filePath,
 		fileName,
 		description,
+		personNames,
 		locationLabel,
 		locality: trimString(fileMeta.location?.locality || record.locality),
 		countryName: trimString(
@@ -274,6 +295,44 @@ function buildSearchEntryInput(
 			fileMeta.location?.countryIso2 || record.countryCode,
 		).toUpperCase(),
 	};
+}
+
+function buildPersonNames(
+	fileMeta: StoredDirectoryMetaEntry,
+	record: Record<string, unknown>,
+) {
+	const candidateNames =
+		Array.isArray(fileMeta.personNames) && fileMeta.personNames.length > 0
+			? fileMeta.personNames
+			: Array.isArray(record.person_names)
+				? record.person_names
+				: [];
+	return trimStringArray(candidateNames);
+}
+
+function mergeFaceDataIntoStoredMeta(
+	fileMeta: StoredDirectoryMetaEntry,
+	faceMeta: StoredFaceMetadata | null,
+): StoredDirectoryMetaEntry {
+	if (!faceMeta) {
+		return fileMeta;
+	}
+
+	const nextMeta: StoredDirectoryMetaEntry = { ...fileMeta };
+	const personNames = buildPersonNames(
+		{
+			...fileMeta,
+			personNames: faceMeta.personNames,
+		},
+		{ person_names: faceMeta.personNames },
+	);
+	if (personNames.length > 0) {
+		nextMeta.personNames = personNames;
+	}
+	if (Array.isArray(faceMeta.faces) && faceMeta.faces.length > 0) {
+		nextMeta.faces = faceMeta.faces;
+	}
+	return nextMeta;
 }
 
 function toSearchEntryDocument(entry: SearchIndexEntryInput): SearchEntryDocument {
@@ -296,6 +355,7 @@ function toTypesenseEntryDocument(entry: SearchEntryDocument) {
 		file_path: entry.filePath,
 		file_name: entry.fileName,
 		description: entry.description,
+		person_names: entry.personNames,
 		location_label: entry.locationLabel,
 		locality: entry.locality,
 		country_name: entry.countryName,
@@ -331,6 +391,7 @@ function fromTypesenseEntryDocument(document: Record<string, unknown>): SearchEn
 		filePath,
 		fileName,
 		description: trimString(document.description),
+		personNames: trimStringArray(document.person_names),
 		locationLabel: trimString(document.location_label),
 		locality: trimString(document.locality),
 		countryName: trimString(document.country_name),
@@ -521,25 +582,59 @@ async function createCollection(
 	});
 }
 
+async function ensureCollectionFields(
+	collectionName: string,
+	fields: Array<Record<string, unknown>>,
+) {
+	const collection = await requestTypesenseJson<Record<string, unknown>>(
+		`/collections/${encodeURIComponent(collectionName)}`,
+	);
+	const existingFields = new Set(
+		Array.isArray(collection.fields)
+			? collection.fields
+					.map((field) =>
+						field && typeof field === "object" ? trimString((field as Record<string, unknown>).name) : "",
+					)
+					.filter(Boolean)
+			: [],
+	);
+	const missingFields = fields.filter((field) => {
+		const fieldName = trimString(field.name);
+		return fieldName && !existingFields.has(fieldName);
+	});
+	if (missingFields.length === 0) {
+		return;
+	}
+
+	await requestTypesense(`/collections/${encodeURIComponent(collectionName)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ fields: missingFields }),
+	});
+}
+
 async function ensureCollections() {
 	const typesense = requireTypesenseConfig();
+	const entryFields = [
+		{ name: "section_id", type: "int32", facet: true },
+		{ name: "section_name", type: "string", sort: true },
+		{ name: "folder", type: "string", sort: true },
+		{ name: "folder_key", type: "string", facet: true },
+		{ name: "date", type: "string", sort: true },
+		{ name: "file_path", type: "string", sort: true },
+		{ name: "file_name", type: "string", sort: true },
+		{ name: "description", type: "string" },
+		{ name: "person_names", type: "string[]" },
+		{ name: "location_label", type: "string" },
+		{ name: "locality", type: "string" },
+		{ name: "country_name", type: "string" },
+		{ name: "country_iso2", type: "string" },
+		{ name: "group_key", type: "string", facet: true },
+	];
 
 	if (!(await collectionExists(typesense.entriesCollection))) {
-		await createCollection(typesense.entriesCollection, [
-			{ name: "section_id", type: "int32", facet: true },
-			{ name: "section_name", type: "string", sort: true },
-			{ name: "folder", type: "string", sort: true },
-			{ name: "folder_key", type: "string", facet: true },
-			{ name: "date", type: "string", sort: true },
-			{ name: "file_path", type: "string", sort: true },
-			{ name: "file_name", type: "string", sort: true },
-			{ name: "description", type: "string" },
-			{ name: "location_label", type: "string" },
-			{ name: "locality", type: "string" },
-			{ name: "country_name", type: "string" },
-			{ name: "country_iso2", type: "string" },
-			{ name: "group_key", type: "string", facet: true },
-		]);
+		await createCollection(typesense.entriesCollection, entryFields);
+	} else {
+		await ensureCollectionFields(typesense.entriesCollection, entryFields);
 	}
 
 	if (!(await collectionExists(typesense.groupsCollection))) {
@@ -666,9 +761,9 @@ function getEntrySearchParams(query: string) {
 	return {
 		q: query,
 		query_by: SEARCH_QUERY_FIELDS.join(","),
-		query_by_weights: "10,8,4,3,2",
-		prefix: "true,true,true,true,true",
-		num_typos: "0,0,0,0,0",
+		query_by_weights: "12,10,8,4,3,2",
+		prefix: "true,true,true,true,true,true",
+		num_typos: "0,0,0,0,0,0",
 		drop_tokens_threshold: "0",
 	};
 }
@@ -767,11 +862,15 @@ async function indexSectionFromThumbMetaFiles(
 			.filter(Boolean);
 		const storedMeta = await readStoredMetaDirectory(section, folderParts);
 		for (const [relativeFilePath, fileMeta] of Object.entries(storedMeta)) {
-			indexed = true;
 			const filePath = folderParts.length
 				? path.posix.join(...folderParts, relativeFilePath)
 				: relativeFilePath;
-			addEntryFromStoredMeta(accumulator, section, filePath, fileMeta);
+			const mergedMeta = mergeFaceDataIntoStoredMeta(
+				fileMeta,
+				await readStoredFaceDataForFile(section, filePath.split("/").filter(Boolean)),
+			);
+			indexed = true;
+			addEntryFromStoredMeta(accumulator, section, filePath, mergedMeta);
 		}
 		onProgress?.({
 			phase: "section-scan",
@@ -802,8 +901,7 @@ async function indexSectionFromStoredMetaRegistry(
 	for (const filePathParts of filePaths) {
 		filesScanned += 1;
 		const filePath = filePathParts.join("/");
-		const storedMeta = await readStoredMetaDirectory(section, filePathParts);
-		const fileMeta = storedMeta[filePathParts[filePathParts.length - 1] || ""];
+		const fileMeta = await readStoredMetaForFile(section, filePathParts);
 		if (!fileMeta) {
 			continue;
 		}

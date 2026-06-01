@@ -42,7 +42,7 @@ Travel archives tend to sprawl across years, cameras, phones, exported albums, d
 | Rich metadata | Shows EXIF, computed dimensions, description, dominant color, GPS, city, and pHash. |
 | Search | Search infrastructure is prepared for a Typesense-backed description and location index across collections. |
 | Background processing | Uses BullMQ workers for thumbnail, metadata, and description jobs. |
-| Operational scripts | Includes warmup, queue scan, geolocation backfill, pHash backfill, search indexing, and a KV thumbnail benchmark script. |
+| Operational scripts | Includes warmup, queue scan, geolocation backfill, pHash backfill, search indexing, a KV thumbnail benchmark script, and a separate Python face indexer. |
 
 ## Screenshot placeholders
 
@@ -249,6 +249,42 @@ npm run warmup:thumbs -- 5
 npm run warmup:thumbs -- "P:/Photos"
 npm run benchmark:thumbs -- --width 100 --delay-ms 100
 ```
+
+### Face indexing and person-name search
+
+Use the separate Python pipeline when you want face detection or person-name search without mixing Python into the Node runtime.
+
+1. Sync the Python dependencies with `uv`:
+
+```bash
+uv sync
+```
+
+2. Optionally create a people file with reference images:
+
+```json
+{
+  "people": [
+    {
+      "id": "alice",
+      "name": "Alice",
+      "referenceImages": [
+        "/absolute/path/to/alice-1.jpg",
+        "/absolute/path/to/alice-2.jpg"
+      ]
+    }
+  ]
+}
+```
+
+3. Run the indexer against one collection or the whole library:
+
+```bash
+uv run python scripts/index-faces.py --section 4 --people-file ./people.json
+uv run python scripts/index-faces.py --people-file ./people.json --force
+```
+
+The script writes InsightFace results into Kvrocks under a dedicated face namespace. The app and search indexer then read `personNames` from Kvrocks, so searching for a known person name works after you rerun `npm run index:search`.
 
 Optional flags:
 

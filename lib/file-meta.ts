@@ -14,6 +14,8 @@ import type {
 	FileGpsCoordinates,
 	FileLocationLabel,
 	StoredDirectoryMetaEntry,
+	StoredFaceMatch,
+	StoredFaceMetadata,
 } from "./files-types.ts";
 import type { ThumbImageMetaData } from "./thumb-jobs.ts";
 
@@ -78,6 +80,22 @@ function buildSearchRegistryKey(sectionKey: string) {
 		.update(JSON.stringify({ sectionKey, kind: "search-registry" }))
 		.digest("hex");
 	return `${thumbKvPrefix}:search-registry:${hash}`;
+}
+
+function buildStoredFaceKey(sectionKey: string, filePath: string) {
+	const hash = crypto
+		.createHash("sha1")
+		.update(JSON.stringify({ sectionKey, filePath, kind: "face-meta" }))
+		.digest("hex");
+	return `${thumbKvPrefix}:face-meta:${hash}`;
+}
+
+function buildFaceRegistryKey(sectionKey: string) {
+	const hash = crypto
+		.createHash("sha1")
+		.update(JSON.stringify({ sectionKey, kind: "face-registry" }))
+		.digest("hex");
+	return `${thumbKvPrefix}:face-registry:${hash}`;
 }
 
 function getSectionKeyAliases(section: ConfigSection): string[] {
@@ -161,8 +179,12 @@ export async function readStoredMetaForFile(
 	section: ConfigSection,
 	filePath: string[],
 ): Promise<StoredDirectoryMetaEntry | null> {
-	const metaData = await readStoredMetaDirectory(section, filePath);
-	return metaData[path.basename(filePath.join("/"))] ?? null;
+	const directoryPath = filePath.slice(0, -1);
+	const fileName = path.basename(filePath.join("/"));
+	const metaData = await readStoredMetaDirectory(section, directoryPath);
+	const storedMeta = metaData[fileName] ?? null;
+	const faceMeta = await readStoredFaceDataForFile(section, filePath);
+	return mergeStoredMetaWithFaceData(storedMeta, faceMeta);
 }
 
 export async function writeStoredMetaForFile(
@@ -172,7 +194,7 @@ export async function writeStoredMetaForFile(
 ) {
 	const metaData = await readStoredMetaDirectory(section, filePath);
 	const baseName = path.basename(filePath.join("/"));
-	metaData[baseName] = metaEntry;
+	metaData[baseName] = stripStoredFaceFields(metaEntry);
 
 	if (section.thumbPath) {
 		const metaFile = getMetaFilePath(section, filePath);
@@ -193,15 +215,203 @@ export async function writeStoredMetaForFile(
 	return { metaFile: metaKeys[0], baseName };
 }
 
+export async function readStoredFaceDataForFile(
+	section: ConfigSection,
+	filePath: string[],
+): Promise<StoredFaceMetadata | null> {
+	const client = await getThumbKvClient();
+	if (!client) {
+		return null;
+	}
+
+	for (const faceKey of getStoredFaceKeys(section, filePath)) {
+		const raw = await client.get(faceKey);
+		if (typeof raw !== "string" || raw.length === 0) {
+			continue;
+		}
+		return normalizeStoredFaceMetadata(JSON.parse(raw) as unknown);
+	}
+
+	return null;
+}
+
+export async function writeStoredFaceDataForFile(
+	section: ConfigSection,
+	filePath: string[],
+	faceMeta: StoredFaceMetadata,
+) {
+	const client = await getThumbKvClient();
+	invariant(client, "thumb KV is required to store face metadata");
+
+	const normalized = normalizeStoredFaceMetadata(faceMeta);
+	const encoded = JSON.stringify(normalized);
+	for (const faceKey of getStoredFaceKeys(section, filePath)) {
+		await client.set(faceKey, encoded);
+	}
+
+	const registryValue = filePath.join("/");
+	for (const registryKey of getFaceRegistryKeys(section)) {
+		await client.sAdd(registryKey, registryValue);
+	}
+
+	return { faceKey: getStoredFaceKeys(section, filePath)[0] };
+}
+
 function getSearchRegistryKeys(section: ConfigSection): string[] {
 	return getSectionKeyAliases(section).map((sectionKey) => buildSearchRegistryKey(sectionKey));
 }
 
-export async function listStoredMetaFilePaths(section: ConfigSection): Promise<string[][]> {
-	if (section.thumbPath) {
+function getStoredFaceKeys(section: ConfigSection, filePath: string[]): string[] {
+	const relativePath = filePath.join("/");
+	return getSectionKeyAliases(section).map((sectionKey) =>
+		buildStoredFaceKey(sectionKey, relativePath),
+	);
+}
+
+function getFaceRegistryKeys(section: ConfigSection): string[] {
+	return getSectionKeyAliases(section).map((sectionKey) => buildFaceRegistryKey(sectionKey));
+}
+
+function stripStoredFaceFields(metaEntry: StoredDirectoryMetaEntry): StoredDirectoryMetaEntry {
+	const { faces: _faces, personNames: _personNames, ...rest } = metaEntry;
+	return rest as StoredDirectoryMetaEntry;
+}
+
+function mergeStoredMetaWithFaceData(
+	metaEntry: StoredDirectoryMetaEntry | null,
+	faceMeta: StoredFaceMetadata | null,
+): StoredDirectoryMetaEntry | null {
+	if (!metaEntry && !faceMeta) {
+		return null;
+	}
+
+	const nextMeta: StoredDirectoryMetaEntry = {
+		...(metaEntry ?? {}),
+		COMPUTED: metaEntry?.COMPUTED ?? {},
+	};
+	if (faceMeta?.faces?.length) {
+		nextMeta.faces = faceMeta.faces;
+	}
+
+	const personNames = normalizeStoredPersonNames(
+		faceMeta?.personNames ??
+			faceMeta?.faces
+				?.map((face) => face.personName)
+				.filter((value): value is string => typeof value === "string" && value.length > 0),
+	);
+	if (personNames.length > 0) {
+		nextMeta.personNames = personNames;
+	}
+
+	return nextMeta;
+}
+
+function normalizeStoredFaceMetadata(value: unknown): StoredFaceMetadata {
+	if (!value || typeof value !== "object") {
+		return {};
+	}
+
+	const record = value as Record<string, unknown>;
+	const nextValue: StoredFaceMetadata = {};
+	if (typeof record.model === "string" && record.model.length > 0) {
+		nextValue.model = record.model;
+	}
+	if (typeof record.analyzedAt === "string" && record.analyzedAt.length > 0) {
+		nextValue.analyzedAt = record.analyzedAt;
+	}
+	if (typeof record.imageSha1 === "string" && record.imageSha1.length > 0) {
+		nextValue.imageSha1 = record.imageSha1;
+	}
+
+	const faces = normalizeStoredFaceMatches(record.faces);
+	if (faces.length > 0) {
+		nextValue.faces = faces;
+	}
+
+	const personNames = normalizeStoredPersonNames(record.personNames);
+	if (personNames.length > 0) {
+		nextValue.personNames = personNames;
+	}
+
+	return nextValue;
+}
+
+function normalizeStoredFaceMatches(value: unknown): StoredFaceMatch[] {
+	if (!Array.isArray(value)) {
 		return [];
 	}
 
+	return value.flatMap((candidate, index) => {
+		if (!candidate || typeof candidate !== "object") {
+			return [];
+		}
+
+		const record = candidate as Record<string, unknown>;
+		const box = normalizeStoredFaceBoundingBox(record.box);
+		if (!box) {
+			return [];
+		}
+
+		const nextFace: StoredFaceMatch = {
+			faceId:
+				typeof record.faceId === "string" && record.faceId.length > 0
+					? record.faceId
+					: `face-${index + 1}`,
+			box,
+		};
+		if (typeof record.detectorScore === "number" && Number.isFinite(record.detectorScore)) {
+			nextFace.detectorScore = record.detectorScore;
+		}
+		if (typeof record.matchScore === "number" && Number.isFinite(record.matchScore)) {
+			nextFace.matchScore = record.matchScore;
+		}
+		if (typeof record.personId === "string" && record.personId.length > 0) {
+			nextFace.personId = record.personId;
+		}
+		if (typeof record.personName === "string" && record.personName.trim().length > 0) {
+			nextFace.personName = record.personName.trim();
+		}
+		return [nextFace];
+	});
+}
+
+function normalizeStoredFaceBoundingBox(value: unknown) {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+
+	const record = value as Record<string, unknown>;
+	const x = normalizeFiniteNumber(record.x);
+	const y = normalizeFiniteNumber(record.y);
+	const width = normalizeFiniteNumber(record.width);
+	const height = normalizeFiniteNumber(record.height);
+	if (x === null || y === null || width === null || height === null) {
+		return null;
+	}
+
+	return { x, y, width, height };
+}
+
+function normalizeStoredPersonNames(value: unknown): string[] {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+
+	return [
+		...new Set(
+			value
+				.filter((candidate): candidate is string => typeof candidate === "string")
+				.map((candidate) => candidate.trim())
+				.filter((candidate) => candidate.length > 0),
+		),
+	];
+}
+
+function normalizeFiniteNumber(value: unknown) {
+	return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export async function listStoredMetaFilePaths(section: ConfigSection): Promise<string[][]> {
 	const client = await getThumbKvClient();
 	if (!client) {
 		return [];
@@ -209,6 +419,14 @@ export async function listStoredMetaFilePaths(section: ConfigSection): Promise<s
 
 	const entries = new Set<string>();
 	for (const registryKey of getSearchRegistryKeys(section)) {
+		const members = await client.sMembers(registryKey);
+		for (const member of members) {
+			if (typeof member === "string" && member.length > 0) {
+				entries.add(member);
+			}
+		}
+	}
+	for (const registryKey of getFaceRegistryKeys(section)) {
 		const members = await client.sMembers(registryKey);
 		for (const member of members) {
 			if (typeof member === "string" && member.length > 0) {

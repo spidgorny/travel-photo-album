@@ -25,7 +25,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 	const resultCount = results.length;
 	const headerContext = rawQuery
 		? `${resultCount} matching day${resultCount === 1 ? "" : "s"} for “${rawQuery}”`
-		: "Search every collection by description or city";
+		: 		"Search every collection by description, city, or person";
 
 	return (
 		<div className="relative overflow-hidden">
@@ -111,7 +111,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 							<SearchEmptyState message={`No days matched “${rawQuery}”.`} />
 						)
 					) : (
-						<SearchEmptyState message="Enter a description or city in the header to search across your travel collections." />
+						<SearchEmptyState message=						"Enter a description, city, or person name in the header to search across your travel collections." />
 					)}
 				</section>
 			</main>

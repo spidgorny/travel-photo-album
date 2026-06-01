@@ -40,6 +40,32 @@ export interface StoredDirectoryMetaEntry extends Record<string, unknown> {
 	location?: FileLocationLabel;
 	description?: string;
 	phash?: string;
+	personNames?: string[];
+	faces?: StoredFaceMatch[];
+}
+
+export interface StoredFaceBoundingBox {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+export interface StoredFaceMatch extends Record<string, unknown> {
+	faceId: string;
+	box: StoredFaceBoundingBox;
+	detectorScore?: number;
+	matchScore?: number;
+	personId?: string;
+	personName?: string;
+}
+
+export interface StoredFaceMetadata extends Record<string, unknown> {
+	faces?: StoredFaceMatch[];
+	personNames?: string[];
+	model?: string;
+	analyzedAt?: string;
+	imageSha1?: string;
 }
 
 export interface DailyLocationSummary extends FileLocationLabel {

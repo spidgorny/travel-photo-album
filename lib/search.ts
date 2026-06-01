@@ -80,9 +80,11 @@ export async function searchPhotoLibrary(
 function getFileSearchTerms(fileMeta: StoredDirectoryMetaEntry | null | undefined) {
 	const description = normalizeStoredDescription(fileMeta?.description);
 	const location = fileMeta?.location;
+	const personNames = Array.isArray(fileMeta?.personNames) ? fileMeta.personNames : [];
 
 	return [
 		description,
+		...personNames,
 		location?.label,
 		location?.locality,
 		location?.countryName,
