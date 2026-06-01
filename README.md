@@ -195,6 +195,7 @@ Important defaults from `.env.example`:
 - `*_TYPESENSE_*` overrides point Docker workers and the indexer at the internal `typesense` service on the compose network
 - `TYPESENSE_HEALTH_TIMEOUT_SECONDS` controls how long the Docker indexer waits for Typesense to become ready
 - `BULLMQ_WORKER_LOCK_DURATION_MS` controls how long the media worker keeps a BullMQ job lock before renewal; increase it for very slow thumbnail or metadata jobs
+- `DESCRIPTION_WORKER_LOCK_DURATION_MS` controls how long the description worker keeps a BullMQ job lock before renewal; increase it for slow Ollama caption jobs
 - `DESCRIPTION_QUEUE_URL` controls the dedicated description queue
 - `OLLAMA_BASE_URL` and `OLLAMA_MODEL` control auto-generated descriptions
 - `MEDIA_ROOT_HOST_PATH` maps your host media path into Docker worker containers

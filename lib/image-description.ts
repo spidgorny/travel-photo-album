@@ -80,13 +80,31 @@ async function requestOllamaCaption(imagePayload: { base64: string }) {
 			images: [imagePayload.base64],
 		}),
 	});
+	const rawBody = await response.text();
 	if (!response.ok) {
-		throw new Error(`Ollama returned ${response.status}`);
+		const detail = summarizeOllamaResponse(rawBody);
+		throw new Error(
+			detail
+				? `Ollama returned ${response.status}: ${detail}`
+				: `Ollama returned ${response.status}`,
+		);
 	}
-	const payload = (await response.json()) as {
+	let payload: {
 		response?: string;
 		error?: string;
 	};
+	try {
+		payload = JSON.parse(rawBody) as {
+			response?: string;
+			error?: string;
+		};
+	} catch {
+		throw new Error(
+			rawBody.trim()
+				? `Ollama returned invalid JSON: ${truncateDetail(rawBody.replace(/\s+/g, " ").trim())}`
+				: "Ollama returned an empty response",
+		);
+	}
 	if (typeof payload.response === "string") {
 		return payload.response;
 	}
@@ -95,4 +113,32 @@ async function requestOllamaCaption(imagePayload: { base64: string }) {
 
 function ensureTrailingSlash(value: string) {
 	return value.endsWith("/") ? value : `${value}/`;
+}
+
+function summarizeOllamaResponse(rawBody: string) {
+	if (!rawBody) {
+		return "";
+	}
+
+	try {
+		const parsed = JSON.parse(rawBody) as {
+			error?: string;
+			response?: string;
+		};
+		if (typeof parsed.error === "string" && parsed.error.trim()) {
+			return truncateDetail(parsed.error);
+		}
+		if (typeof parsed.response === "string" && parsed.response.trim()) {
+			return truncateDetail(parsed.response);
+		}
+	} catch {}
+
+	return truncateDetail(rawBody.replace(/\s+/g, " ").trim());
+}
+
+function truncateDetail(value: string, maxLength = 240) {
+	if (value.length <= maxLength) {
+		return value;
+	}
+	return `${value.slice(0, maxLength - 1)}…`;
 }

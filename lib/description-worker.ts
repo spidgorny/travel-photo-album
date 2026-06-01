@@ -22,6 +22,19 @@ export const descriptionWorkerJobNames = {
 	generateImageDescription: descriptionJobActions.generateImageDescription,
 } as const;
 
+const defaultDescriptionWorkerLockDurationMs = 30 * 60 * 1000;
+
+export function getDescriptionWorkerLockDurationMs() {
+	const parsedLockDuration = Number(
+		process.env.DESCRIPTION_WORKER_LOCK_DURATION_MS ??
+			process.env.BULLMQ_WORKER_LOCK_DURATION_MS ??
+			defaultDescriptionWorkerLockDurationMs,
+	);
+	return Number.isInteger(parsedLockDuration) && parsedLockDuration >= 30_000
+		? parsedLockDuration
+		: defaultDescriptionWorkerLockDurationMs;
+}
+
 export function resolveDescriptionJobName(jobName, payload) {
 	return payload?.action || jobName;
 }

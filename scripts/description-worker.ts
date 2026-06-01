@@ -11,7 +11,11 @@ import {
 	descriptionQueueName,
 	descriptionQueuePrefix,
 } from "../lib/description-jobs.ts";
-import { processDescriptionJob, resolveDescriptionJobName } from "../lib/description-worker.ts";
+import {
+	getDescriptionWorkerLockDurationMs,
+	processDescriptionJob,
+	resolveDescriptionJobName,
+} from "../lib/description-worker.ts";
 import { closeThumbKvClient } from "../lib/thumb-store.ts";
 
 const connection = createDescriptionQueueConnection();
@@ -35,6 +39,8 @@ const worker = new Worker(
 	{
 		connection,
 		concurrency,
+		lockDuration: getDescriptionWorkerLockDurationMs(),
+		lockRenewTime: Math.max(Math.floor(getDescriptionWorkerLockDurationMs() / 3), 15_000),
 		prefix: descriptionQueuePrefix,
 	},
 );
