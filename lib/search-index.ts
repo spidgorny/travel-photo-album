@@ -90,6 +90,27 @@ interface GroupAccumulator {
 	locationCounts: Map<string, number>;
 }
 
+export interface RebuildSearchIndexProgress {
+	phase:
+		| "prepare"
+		| "section-start"
+		| "section-scan"
+		| "section-import"
+		| "section-complete";
+	sectionId?: number;
+	sectionName?: string;
+	source?: "thumb-meta" | "stored-meta";
+	metaFilesScanned?: number;
+	filesScanned?: number;
+	entriesCollected?: number;
+	groupsCollected?: number;
+	documentsImported?: number;
+	totalDocuments?: number;
+	batchNumber?: number;
+	batchCount?: number;
+	replaceAll?: boolean;
+}
+
 const SEARCH_QUERY_FIELDS = [
 	"description",
 	"location_label",
@@ -595,11 +616,13 @@ async function deleteDocumentById(collectionName: string, documentId: string) {
 async function importDocuments<TDocument extends object>(
 	collectionName: string,
 	documents: TDocument[],
+	onProgress?: (importedDocuments: number, totalDocuments: number, batchNumber: number, batchCount: number) => void,
 ) {
 	if (documents.length === 0) {
 		return;
 	}
 
+	const batchCount = Math.ceil(documents.length / IMPORT_BATCH_SIZE);
 	for (let index = 0; index < documents.length; index += IMPORT_BATCH_SIZE) {
 		const batch = documents.slice(index, index + IMPORT_BATCH_SIZE);
 		const payload = batch.map((document) => JSON.stringify(document)).join("\n");
@@ -621,6 +644,12 @@ async function importDocuments<TDocument extends object>(
 		if (failures.length > 0) {
 			throw new Error(failures.map((failure) => failure.error).join("; "));
 		}
+		onProgress?.(
+			Math.min(index + batch.length, documents.length),
+			documents.length,
+			Math.floor(index / IMPORT_BATCH_SIZE) + 1,
+			batchCount,
+		);
 	}
 }
 
@@ -722,13 +751,16 @@ function walkFilesNamed(rootPath: string, targetName: string) {
 async function indexSectionFromThumbMetaFiles(
 	section: SearchSection,
 	accumulator: SectionAccumulator,
+	onProgress?: (event: RebuildSearchIndexProgress) => void,
 ) {
 	if (!section.thumbPath || !fs.existsSync(section.thumbPath)) {
 		return false;
 	}
 
 	let indexed = false;
+	let metaFilesScanned = 0;
 	for (const metaFilePath of walkFilesNamed(section.thumbPath, "meta.json")) {
+		metaFilesScanned += 1;
 		const folderParts = path
 			.relative(section.thumbPath, path.dirname(metaFilePath))
 			.split(path.sep)
@@ -738,6 +770,15 @@ async function indexSectionFromThumbMetaFiles(
 			indexed = true;
 			addEntryFromStoredMeta(accumulator, section, relativeFilePath, fileMeta);
 		}
+		onProgress?.({
+			phase: "section-scan",
+			sectionId: section.id,
+			sectionName: section.name,
+			source: "thumb-meta",
+			metaFilesScanned,
+			entriesCollected: accumulator.entries.length,
+			groupsCollected: accumulator.groups.size,
+		});
 	}
 
 	return indexed;
@@ -746,6 +787,7 @@ async function indexSectionFromThumbMetaFiles(
 async function indexSectionFromStoredMetaRegistry(
 	section: SearchSection,
 	accumulator: SectionAccumulator,
+	onProgress?: (event: RebuildSearchIndexProgress) => void,
 ) {
 	const filePaths = await listStoredMetaFilePaths(section);
 	if (filePaths.length === 0) {
@@ -753,7 +795,9 @@ async function indexSectionFromStoredMetaRegistry(
 	}
 
 	let indexed = false;
+	let filesScanned = 0;
 	for (const filePathParts of filePaths) {
+		filesScanned += 1;
 		const filePath = filePathParts.join("/");
 		const storedMeta = await readStoredMetaDirectory(section, filePathParts);
 		const fileMeta = storedMeta[filePathParts[filePathParts.length - 1] || ""];
@@ -763,16 +807,28 @@ async function indexSectionFromStoredMetaRegistry(
 
 		indexed = true;
 		addEntryFromStoredMeta(accumulator, section, filePath, fileMeta);
+		onProgress?.({
+			phase: "section-scan",
+			sectionId: section.id,
+			sectionName: section.name,
+			source: "stored-meta",
+			filesScanned,
+			entriesCollected: accumulator.entries.length,
+			groupsCollected: accumulator.groups.size,
+		});
 	}
 
 	return indexed;
 }
 
-async function collectSectionDocuments(section: SearchSection) {
+async function collectSectionDocuments(
+	section: SearchSection,
+	onProgress?: (event: RebuildSearchIndexProgress) => void,
+) {
 	const accumulator = new SectionAccumulator();
 	const indexed =
-		(await indexSectionFromThumbMetaFiles(section, accumulator)) ||
-		(await indexSectionFromStoredMetaRegistry(section, accumulator));
+		(await indexSectionFromThumbMetaFiles(section, accumulator, onProgress)) ||
+		(await indexSectionFromStoredMetaRegistry(section, accumulator, onProgress));
 
 	return {
 		indexed,
@@ -824,11 +880,22 @@ export async function countSearchEntries() {
 
 export async function rebuildSearchIndex(
 	sections: SearchSection[] = getDefaultSections(),
-	options: boolean | { replaceAll?: boolean } = true,
+	options:
+		| boolean
+		| {
+				replaceAll?: boolean;
+				onProgress?: (event: RebuildSearchIndexProgress) => void;
+		  } = true,
 ) {
 	const typesense = requireTypesenseConfig();
 	const replaceAll =
 		typeof options === "boolean" ? options : options.replaceAll !== false;
+	const onProgress = typeof options === "boolean" ? undefined : options.onProgress;
+
+	onProgress?.({
+		phase: "prepare",
+		replaceAll,
+	});
 
 	if (replaceAll) {
 		await Promise.all([
@@ -840,6 +907,11 @@ export async function rebuildSearchIndex(
 	await ensureCollections();
 
 	for (const section of sections) {
+		onProgress?.({
+			phase: "section-start",
+			sectionId: section.id,
+			sectionName: section.name,
+		});
 		if (!replaceAll) {
 			await Promise.all([
 				deleteDocumentsByFilter(
@@ -853,15 +925,51 @@ export async function rebuildSearchIndex(
 			]);
 		}
 
-		const { indexed, entries, groups } = await collectSectionDocuments(section);
+		const { indexed, entries, groups } = await collectSectionDocuments(section, onProgress);
 		if (!indexed) {
+			onProgress?.({
+				phase: "section-complete",
+				sectionId: section.id,
+				sectionName: section.name,
+				entriesCollected: 0,
+				groupsCollected: 0,
+			});
 			continue;
 		}
 
 		await Promise.all([
-			importDocuments(typesense.entriesCollection, entries),
-			importDocuments(typesense.groupsCollection, groups),
+			importDocuments(typesense.entriesCollection, entries, (documentsImported, totalDocuments, batchNumber, batchCount) =>
+				onProgress?.({
+					phase: "section-import",
+					sectionId: section.id,
+					sectionName: section.name,
+					source: "stored-meta",
+					documentsImported,
+					totalDocuments,
+					batchNumber,
+					batchCount,
+				}),
+			),
+			importDocuments(typesense.groupsCollection, groups, (documentsImported, totalDocuments, batchNumber, batchCount) =>
+				onProgress?.({
+					phase: "section-import",
+					sectionId: section.id,
+					sectionName: section.name,
+					source: "thumb-meta",
+					documentsImported,
+					totalDocuments,
+					batchNumber,
+					batchCount,
+				}),
+			),
 		]);
+		onProgress?.({
+			phase: "section-complete",
+			sectionId: section.id,
+			sectionName: section.name,
+			entriesCollected: entries.length,
+			groupsCollected: groups.length,
+		});
 	}
 
 	return await countSearchEntries();

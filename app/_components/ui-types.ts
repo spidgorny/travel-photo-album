@@ -122,45 +122,33 @@ export interface QueueInfo {
 	}>;
 }
 
-export interface ThumbStorageRootInfo {
-	path: string;
-	exists: boolean;
-	directories: number;
-	thumbnailFiles: number;
-	metaFiles: number;
-	totalBytes: number;
-}
-
 export interface ThumbStorageInfo {
 	configuredSections: number;
-	diskBackedSections: number;
-	kvBackedSections: number;
-	disk: {
-		configuredRoots: number;
-		missingRoots: number;
-		directories: number;
-		thumbnailFiles: number;
-		metaFiles: number;
-		totalBytes: number;
-	};
-	diskRoots: ThumbStorageRootInfo[];
 	kv: {
 		configured: boolean;
 		connectionUrl: string | null;
 		prefix: string;
 		blobEntries: number;
-		metaEntries: number;
+		thumbnailMetaEntries: number;
+		directoryMetaKeys: number;
+		fileMetadataEntries: number;
+		gpsEntries: number;
+		locationEntries: number;
+		descriptionEntries: number;
+		phashEntries: number;
+		totalKeys: number | null;
+		usedMemoryBytes: number | null;
+		usedMemoryHuman: string | null;
 	};
-}
-
-export interface AppInfoResponse {
-	queue: QueueInfo;
-	storage: ThumbStorageInfo;
-	updatedAt: string;
 }
 
 export interface QueueProgressResponse {
 	queue: QueueInfo;
+	updatedAt: string;
+}
+
+export interface ThumbStorageResponse {
+	storage: ThumbStorageInfo;
 	updatedAt: string;
 }
 

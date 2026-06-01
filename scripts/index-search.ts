@@ -5,6 +5,7 @@ import {
 	countSearchEntries,
 	getSearchIndexPath,
 	rebuildSearchIndex,
+	type RebuildSearchIndexProgress,
 	type SearchSection,
 } from "../lib/search-index.ts";
 import { closeThumbKvClient } from "../lib/thumb-store.ts";
@@ -16,6 +17,7 @@ const sections = (Array.isArray(config.sections) ? config.sections : []).map((se
 })) as SearchSection[];
 const requestedSections = getRequestedSections(sections, process.argv.slice(2));
 const startedAt = Date.now();
+let lastProgressLogAt = 0;
 
 console.log(
 	`Indexing search metadata into ${getSearchIndexPath()} for ${requestedSections.length} collection(s)`,
@@ -23,6 +25,7 @@ console.log(
 
 const totalEntries = await rebuildSearchIndex(requestedSections, {
 	replaceAll: requestedSections.length === sections.length,
+	onProgress: logIndexProgress,
 });
 const indexedEntryCount = await countSearchEntries();
 
@@ -67,4 +70,54 @@ function getRequestedSections(allSections: SearchSection[], args: string[]) {
 	}
 
 	return matches;
+}
+
+function logIndexProgress(event: RebuildSearchIndexProgress) {
+	const now = Date.now();
+	const isThrottledPhase = event.phase === "section-scan" || event.phase === "section-import";
+	if (isThrottledPhase && now - lastProgressLogAt < 1000) {
+		return;
+	}
+
+	if (isThrottledPhase) {
+		lastProgressLogAt = now;
+	}
+
+	switch (event.phase) {
+ 		case "prepare":
+ 			console.log(
+ 				event.replaceAll
+ 					? "Resetting Typesense collections before rebuild..."
+ 					: "Updating requested collections in existing Typesense index...",
+ 			);
+ 			break;
+		case "section-start":
+			console.log(
+				`[${event.sectionId}] ${event.sectionName}: collecting stored metadata for indexing...`,
+			);
+			break;
+		case "section-scan":
+			console.log(
+				`[${event.sectionId}] ${event.sectionName}: scanned ${
+					event.source === "thumb-meta"
+						? `${event.metaFilesScanned ?? 0} meta.json file(s)`
+						: `${event.filesScanned ?? 0} stored file record(s)`
+				}, collected ${event.entriesCollected ?? 0} entries / ${event.groupsCollected ?? 0} groups`,
+			);
+			break;
+		case "section-import":
+			console.log(
+				`[${event.sectionId}] ${event.sectionName}: imported ${event.documentsImported ?? 0}/${event.totalDocuments ?? 0} ${
+					event.source === "thumb-meta" ? "group" : "entry"
+				} document(s) (batch ${event.batchNumber ?? 0}/${event.batchCount ?? 0})`,
+			);
+			break;
+		case "section-complete":
+			console.log(
+				`[${event.sectionId}] ${event.sectionName}: complete with ${event.entriesCollected ?? 0} entries and ${event.groupsCollected ?? 0} groups`,
+			);
+			break;
+		default:
+			break;
+	}
 }

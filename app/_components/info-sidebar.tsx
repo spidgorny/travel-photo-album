@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
-import type { AppInfoResponse } from "./ui-types";
+import type { ThumbStorageResponse } from "./ui-types";
 import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 
 interface InfoSidebarProps {
@@ -19,8 +19,13 @@ export function InfoSidebar({
 	activeCollection,
 	activeFolder,
 }: InfoSidebarProps) {
-	const { data, error, isLoading, mutate } = useSWR<AppInfoResponse>(
-		isOpen ? "/api/info" : null,
+	const {
+		data: storageData,
+		error: storageError,
+		isLoading: isStorageLoading,
+		mutate: mutateStorage,
+	} = useSWR<ThumbStorageResponse>(
+		isOpen ? "/api/storage-info" : null,
 		fetcher,
 	);
 
@@ -65,11 +70,10 @@ export function InfoSidebar({
 							System info
 						</p>
 						<h2 className="mt-2 text-2xl font-semibold text-white">
-							Queue and thumbnail storage
+							KVrocks storage
 						</h2>
 						<p className="mt-2 text-sm leading-6 text-slate-400">
-							Check queue throughput, current workload, and thumbnail storage usage
-							without leaving the gallery.
+							Check thumbnail and metadata coverage in KVrocks without leaving the gallery.
 						</p>
 					</div>
 					<button
@@ -101,101 +105,70 @@ export function InfoSidebar({
 						</div>
 					</section>
 
-					{isLoading && !error && !data ? (
-						<div className="flex min-h-[16rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-900/40">
-							<Loading />
-						</div>
-					) : null}
-
-					{error ? (
+					{storageError ? (
 						<ErrorState
-							message="Failed to load system info."
-							error={error}
-							details={getErrorMessage(error)}
-							onRetry={() => mutate()}
+							message="Failed to load thumbnail storage info."
+							error={storageError}
+							details={getErrorMessage(storageError)}
+							onRetry={() => mutateStorage()}
 						/>
 					) : null}
 
-					{data ? (
+					{storageData ? (
 						<>
 							<section className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
 								<div className="flex items-start justify-between gap-3">
 									<div>
 										<p className="text-xs uppercase tracking-[0.22em] text-slate-400">
-											Queue
+											KVrocks
 										</p>
 										<h3 className="mt-2 text-xl font-semibold text-white">
-											{data.queue.name}
-										</h3>
-									</div>
-									<span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2.5 py-1 text-xs font-medium text-sky-100">
-										{data.queue.configured ? "Connected" : "Disabled"}
-									</span>
-								</div>
-								<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-									<MetricCard label="Queued now" value={data.queue.totalQueued} />
-									<MetricCard label="Processed" value={data.queue.totalProcessed} />
-									<MetricCard label="Failed" value={data.queue.counts.failed} />
-									<MetricCard label="Waiting" value={data.queue.counts.waiting} />
-									<MetricCard label="Active" value={data.queue.counts.active} />
-									<MetricCard label="Delayed" value={data.queue.counts.delayed} />
-								</div>
-								<div className="mt-4 space-y-2 text-sm text-slate-400">
-									<InfoRow label="Prefix" value={data.queue.prefix} />
-									<InfoRow
-										label="Connection"
-										value={data.queue.connectionUrl || "Not configured"}
-									/>
-								</div>
-							</section>
-
-							<section className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
-								<div className="flex items-start justify-between gap-3">
-									<div>
-										<p className="text-xs uppercase tracking-[0.22em] text-slate-400">
-											Thumbnail storage
-										</p>
-										<h3 className="mt-2 text-xl font-semibold text-white">
-											Disk and KV overview
+											Thumbnail and metadata overview
 										</h3>
 									</div>
 									<span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-slate-300">
-										{data.storage.configuredSections} collections
+										{storageData.storage.configuredSections} collections
 									</span>
 								</div>
 
 								<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
 									<MetricCard
-										label="Disk thumb files"
-										value={data.storage.disk.thumbnailFiles}
+										label="Thumb blobs"
+										value={storageData.storage.kv.blobEntries}
 									/>
-									<MetricCard label="Disk meta files" value={data.storage.disk.metaFiles} />
 									<MetricCard
-										label="Disk usage"
-										value={formatBytes(data.storage.disk.totalBytes)}
+										label="Thumb meta hashes"
+										value={storageData.storage.kv.thumbnailMetaEntries}
 									/>
-									<MetricCard label="KV thumb blobs" value={data.storage.kv.blobEntries} />
-									<MetricCard label="KV meta entries" value={data.storage.kv.metaEntries} />
 									<MetricCard
-										label="Missing roots"
-										value={data.storage.disk.missingRoots}
+										label="Directory meta keys"
+										value={storageData.storage.kv.directoryMetaKeys}
 									/>
+									<MetricCard
+										label="Indexed files"
+										value={storageData.storage.kv.fileMetadataEntries}
+									/>
+									<MetricCard
+										label="Descriptions"
+										value={storageData.storage.kv.descriptionEntries}
+									/>
+									<MetricCard label="GPS entries" value={storageData.storage.kv.gpsEntries} />
 								</div>
 
 								<div className="mt-4 space-y-2 text-sm text-slate-400">
+									<InfoRow label="Total keys" value={formatNullableNumber(storageData.storage.kv.totalKeys)} />
 									<InfoRow
-										label="Disk-backed sections"
-										value={String(data.storage.diskBackedSections)}
-									/>
-									<InfoRow
-										label="KV-backed sections"
-										value={String(data.storage.kvBackedSections)}
+										label="Used memory"
+										value={
+											storageData.storage.kv.usedMemoryHuman ||
+											formatNullableBytes(storageData.storage.kv.usedMemoryBytes)
+										}
 									/>
 									<InfoRow
 										label="KV connection"
-										value={data.storage.kv.connectionUrl || "Not configured"}
+										value={storageData.storage.kv.connectionUrl || "Not configured"}
 									/>
-									<InfoRow label="KV prefix" value={data.storage.kv.prefix} />
+									<InfoRow label="KV prefix" value={storageData.storage.kv.prefix} />
 								</div>
 							</section>
 
@@ -203,57 +176,45 @@ export function InfoSidebar({
 								<div className="flex items-center justify-between gap-3">
 									<div>
 										<p className="text-xs uppercase tracking-[0.22em] text-slate-400">
-											Thumbnail roots
+											Metadata coverage
 										</p>
 										<h3 className="mt-2 text-xl font-semibold text-white">
-											Disk storage details
+											What is stored in KVrocks
 										</h3>
 									</div>
 									<span className="text-xs text-slate-400">
-										Updated {formatTimestamp(data.updatedAt)}
+										Updated {formatTimestamp(storageData.updatedAt)}
 									</span>
 								</div>
 								<div className="mt-4 space-y-3">
-									{data.storage.diskRoots.map((root) => (
-										<div
-											key={root.path}
-											className="rounded-2xl border border-white/10 bg-slate-900/50 p-3"
-										>
-											<div className="flex items-center justify-between gap-3">
-												<div className="min-w-0">
-													<div className="truncate text-sm font-medium text-white">
-														{root.path}
-													</div>
-													<div className="mt-1 text-xs text-slate-400">
-														{root.exists ? "Available" : "Missing"}
-													</div>
-												</div>
-												<span
-													className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-														root.exists
-															? "border border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
-															: "border border-amber-400/20 bg-amber-400/10 text-amber-100"
-													}`}
-												>
-													{root.exists ? "Ready" : "Not found"}
-												</span>
-											</div>
-											<div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-300">
-												<SmallMetric label="Thumb files" value={root.thumbnailFiles} />
-												<SmallMetric label="Meta files" value={root.metaFiles} />
-												<SmallMetric label="Folders" value={root.directories} />
-												<SmallMetric label="Usage" value={formatBytes(root.totalBytes)} />
-											</div>
-										</div>
-									))}
-									{!data.storage.diskRoots.length ? (
-										<div className="rounded-2xl border border-dashed border-white/10 bg-slate-900/40 p-4 text-sm text-slate-400">
-											No disk-backed thumbnail roots are configured yet.
-										</div>
-									) : null}
+									<div className="grid grid-cols-2 gap-3">
+										<SmallMetric
+											label="Files with location"
+											value={storageData.storage.kv.locationEntries}
+										/>
+										<SmallMetric
+											label="Files with pHash"
+											value={storageData.storage.kv.phashEntries}
+										/>
+										<SmallMetric
+											label="Files with GPS"
+											value={storageData.storage.kv.gpsEntries}
+										/>
+										<SmallMetric
+											label="Files with descriptions"
+											value={storageData.storage.kv.descriptionEntries}
+										/>
+									</div>
+									<div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4 text-sm text-slate-300">
+										Directory metadata is scanned from <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs text-slate-200">{storageData.storage.kv.prefix}:directory-meta:*</code>, so these counts reflect stored per-file metadata in KVrocks rather than old disk caches.
+									</div>
 								</div>
 							</section>
 						</>
+					) : null}
+
+					{isStorageLoading && !storageError && !storageData ? (
+						<PanelLoading label="Loading thumbnail storage info..." />
 					) : null}
 				</div>
 			</aside>
@@ -288,6 +249,17 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 	);
 }
 
+function PanelLoading({ label }: { label: string }) {
+	return (
+		<section className="flex min-h-[12rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-900/40">
+			<div className="flex flex-col items-center gap-3 text-sm text-slate-400">
+				<Loading />
+				<div>{label}</div>
+			</div>
+		</section>
+	);
+}
+
 function formatBytes(bytes: number) {
 	if (!bytes) {
 		return "0 B";
@@ -296,6 +268,14 @@ function formatBytes(bytes: number) {
 	const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
 	const value = bytes / 1024 ** unit;
 	return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function formatNullableBytes(bytes: number | null) {
+	return typeof bytes === "number" ? formatBytes(bytes) : "Unavailable";
+}
+
+function formatNullableNumber(value: number | null) {
+	return typeof value === "number" ? value.toLocaleString() : "Unavailable";
 }
 
 function formatTimestamp(value: string) {

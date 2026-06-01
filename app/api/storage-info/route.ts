@@ -1,22 +1,22 @@
 import { NextResponse } from "next/server";
 import { jsonError } from "../../../lib/api-route";
-import { getQueueInfo } from "../../../lib/queue-info";
 import { getThumbStorageInfo } from "../../../lib/storage-info";
 
 export const runtime = "nodejs";
 
 export async function GET() {
 	try {
-		const [queue, storage] = await Promise.all([
-			getQueueInfo(),
-			getThumbStorageInfo(),
-		]);
-
-		return NextResponse.json({
-			queue,
-			storage,
-			updatedAt: new Date().toISOString(),
-		});
+		return NextResponse.json(
+			{
+				storage: await getThumbStorageInfo(),
+				updatedAt: new Date().toISOString(),
+			},
+			{
+				headers: {
+					"Cache-Control": "no-store",
+				},
+			},
+		);
 	} catch (error) {
 		return NextResponse.json(jsonError(error), { status: 500 });
 	}
