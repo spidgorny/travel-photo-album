@@ -42,7 +42,7 @@ Travel archives tend to sprawl across years, cameras, phones, exported albums, d
 | Rich metadata | Shows EXIF, computed dimensions, description, dominant color, GPS, city, and pHash. |
 | Search | Search infrastructure is prepared for a Typesense-backed description and location index across collections. |
 | Background processing | Uses BullMQ workers for thumbnail, metadata, and description jobs. |
-| Operational scripts | Includes warmup, queue scan, geolocation backfill, pHash backfill, and search indexing scripts. |
+| Operational scripts | Includes warmup, queue scan, geolocation backfill, pHash backfill, search indexing, and a KV thumbnail benchmark script. |
 
 ## Screenshot placeholders
 
@@ -247,6 +247,7 @@ Recursively scan one collection and enqueue work for all nested folders:
 ```bash
 npm run warmup:thumbs -- 5
 npm run warmup:thumbs -- "P:/Photos"
+npm run benchmark:thumbs -- --width 100 --delay-ms 100
 ```
 
 Optional flags:

@@ -768,7 +768,10 @@ async function indexSectionFromThumbMetaFiles(
 		const storedMeta = await readStoredMetaDirectory(section, folderParts);
 		for (const [relativeFilePath, fileMeta] of Object.entries(storedMeta)) {
 			indexed = true;
-			addEntryFromStoredMeta(accumulator, section, relativeFilePath, fileMeta);
+			const filePath = folderParts.length
+				? path.posix.join(...folderParts, relativeFilePath)
+				: relativeFilePath;
+			addEntryFromStoredMeta(accumulator, section, filePath, fileMeta);
 		}
 		onProgress?.({
 			phase: "section-scan",

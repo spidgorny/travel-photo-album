@@ -13,6 +13,7 @@
     "index:phash": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/index-phash.ts",
     "index:search": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/index-search.ts",
     "warmup:thumbs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/warmup-thumbnails.ts",
+    "benchmark:thumbs": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/benchmark-kv-thumbs.ts",
     "descriptions:list": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/list-descriptions.ts",
     "worker:media": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/media-worker.ts",
     "worker:description": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/description-worker.ts",
