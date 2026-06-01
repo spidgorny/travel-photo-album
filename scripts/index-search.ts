@@ -24,10 +24,11 @@ console.log(
 const totalEntries = await rebuildSearchIndex(requestedSections, {
 	replaceAll: requestedSections.length === sections.length,
 });
+const indexedEntryCount = await countSearchEntries();
 
 const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
 console.log(
-	`Indexed ${countSearchEntries()} file row(s) in ${elapsedSeconds}s (${totalEntries} total entries in DB)`,
+	`Indexed ${indexedEntryCount} file row(s) in ${elapsedSeconds}s (${totalEntries} total entries in Typesense)`,
 );
 
 await Promise.allSettled([closeThumbKvClient(), closeRedisClient()]);

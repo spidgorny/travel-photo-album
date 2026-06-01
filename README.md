@@ -40,7 +40,7 @@ Travel archives tend to sprawl across years, cameras, phones, exported albums, d
 | Fast previews | Serves thumbnails from `thumbPath` or Kvrocks and upgrades to larger media in the lightbox. |
 | Mixed media support | Handles both photos and videos in the gallery and single-item viewer. |
 | Rich metadata | Shows EXIF, computed dimensions, description, dominant color, GPS, city, and pHash. |
-| Search | Builds a SQLite search index for description and location-based discovery across collections. |
+| Search | Search infrastructure is prepared for a Typesense-backed description and location index across collections. |
 | Background processing | Uses BullMQ workers for thumbnail, metadata, and description jobs. |
 | Operational scripts | Includes warmup, queue scan, geolocation backfill, pHash backfill, and search indexing scripts. |
 
@@ -86,7 +86,7 @@ Route handlers in `app/api/**` are thin adapters over the filesystem and metadat
 - **Collection definitions** live in `config.json`
 - **Thumbnail blobs / directory metadata** live in `thumbPath` folders or Kvrocks
 - **BullMQ queue state** lives in Redis and is persisted locally in `./redis`
-- **Search index** lives in `./data/search-index.sqlite` by default
+- **Search engine** runs in Typesense over HTTP on port `8108` when Docker services are enabled
 
 ### Workers
 
@@ -145,7 +145,7 @@ Within a day, similar images can be grouped using perceptual hashes so burst sho
 - Node.js 20+ recommended
 - npm
 - access to the media folders referenced by `config.json`
-- optional: Docker Desktop for Kvrocks, Redis, and worker containers
+- optional: Docker Desktop for Typesense, Kvrocks, Redis, and worker containers
 - optional: `ffmpeg` for video thumbnail generation workflows
 
 ### 1. Install dependencies
@@ -191,6 +191,9 @@ Important defaults from `.env.example`:
 
 - `REDIS_URL` and `THUMB_KV_URL` target Kvrocks on port `6666`
 - `BULLMQ_REDIS_URL` and `THUMB_QUEUE_URL` target Redis on port `6379`
+- `TYPESENSE_PROTOCOL`, `TYPESENSE_HOST`, `TYPESENSE_PORT`, `TYPESENSE_API_KEY`, and `TYPESENSE_COLLECTION` define the default search endpoint for the app
+- `*_TYPESENSE_*` overrides point Docker workers and the indexer at the internal `typesense` service on the compose network
+- `TYPESENSE_HEALTH_TIMEOUT_SECONDS` controls how long the Docker indexer waits for Typesense to become ready
 - `BULLMQ_WORKER_LOCK_DURATION_MS` controls how long the media worker keeps a BullMQ job lock before renewal; increase it for very slow thumbnail or metadata jobs
 - `DESCRIPTION_QUEUE_URL` controls the dedicated description queue
 - `OLLAMA_BASE_URL` and `OLLAMA_MODEL` control auto-generated descriptions
@@ -209,15 +212,17 @@ Then open <http://localhost:3000>.
 Bring up the local services and workers:
 
 ```bash
-docker compose up -d kvrocks redis media-worker description-worker
+docker compose up -d typesense kvrocks redis media-worker description-worker search-indexer
 ```
 
 What each service does:
 
+- `typesense`: HTTP search engine for indexed descriptions and locations, persisted in the named `typesense_data` volume
 - `kvrocks`: folder cache and thumbnail/blob metadata storage
 - `redis`: BullMQ queue backend, persisted in `./redis`
 - `media-worker`: background thumbnails, metadata, EXIF, and related processing
 - `description-worker`: automatic image descriptions using Ollama on a separate queue
+- `search-indexer`: runs `npm run index:search` on a loop (hourly by default) and is pre-wired with `TYPESENSE_*` settings on the compose network
 
 Useful watch commands during development:
 
@@ -225,6 +230,7 @@ Useful watch commands during development:
 docker compose watch kvrocks
 docker compose watch media-worker
 docker compose watch description-worker
+docker compose watch search-indexer
 ```
 
 ## Core workflows
@@ -288,11 +294,22 @@ npm run index:search -- --section 5
 npm run index:search -- --section "P:/Photos"
 ```
 
+To rebuild automatically in Docker, run the `search-indexer` service. It executes `npm run index:search`
+on a loop, waits for Typesense health first, and receives `TYPESENSE_*` connection settings over the
+compose network.
+
+The application-side search/index implementation still uses the existing SQLite helpers today; this
+infrastructure change only swaps the Docker/bootstrap defaults over to a networked Typesense service.
+
+Set `SEARCH_INDEX_INTERVAL_SECONDS` in `.env` to change the schedule. The default is `3600`
+seconds (once per hour).
+
 ## Validation
 
 Use these commands to validate changes:
 
 ```bash
+docker compose config --quiet
 npm run typecheck
 npm run build
 ```
@@ -311,7 +328,7 @@ lib/
   files.ts             Filesystem helpers and date extraction
   file-meta.ts         Metadata, GPS, and pHash helpers
   thumb-store.ts       Thumbnail/blob storage access
-  search-index.ts      SQLite search index helpers
+  search-index.ts      Search indexing helpers (currently SQLite-backed in app code)
 scripts/
   warmup-thumbnails.ts
   enqueue-collection-scan.ts
@@ -320,7 +337,7 @@ scripts/
   index-geolocation.ts
   index-phash.ts
   index-search.ts
-data/                  Generated local artifacts, including SQLite index
+data/                  Generated local artifacts
 kvrocks/               Local Kvrocks persistence
 redis/                 Local Redis persistence
 ```
@@ -332,6 +349,7 @@ redis/                 Local Redis persistence
 - API payload shapes are intentionally stable because the client expects fields such as `{ files }`, `{ dates }`, and `COMPUTED.Width`
 - `data/` is ignored and safe for generated local artifacts
 - Redis automatically reloads `dump.rdb` from `./redis` on startup
+- Typesense persists its search data in the named Docker volume `typesense_data`
 
 ## Troubleshooting
 
@@ -346,6 +364,7 @@ redis/                 Local Redis persistence
 
 - make sure descriptions or city metadata exist
 - run `npm run index:search`
+- verify the app or worker can reach `http://127.0.0.1:8108` locally, or `http://typesense:8108` from Docker services
 - if using generated descriptions, ensure the description worker and Ollama are configured
 
 ### pHash is missing
@@ -357,7 +376,7 @@ redis/                 Local Redis persistence
 
 - Redis is bind-mounted to `./redis`
 - Kvrocks is bind-mounted to `./kvrocks`
-- the SQLite search index lives under `./data`
+- Typesense search data lives in the named `typesense_data` volume
 
 ## Roadmap ideas
 

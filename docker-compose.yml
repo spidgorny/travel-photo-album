@@ -1,4 +1,17 @@
 services:
+  typesense:
+    image: typesense/typesense:29.0
+    ports:
+      - "8108:8108"
+    command:
+      - "--data-dir"
+      - "/data"
+      - "--api-key=${TYPESENSE_API_KEY:-change-me-typesense-key}"
+      - "--enable-cors"
+    volumes:
+      - typesense_data:/data
+    restart: unless-stopped
+
   kvrocks:
     image: apache/kvrocks:latest
     ports:
@@ -27,6 +40,7 @@ services:
       - .env
     command: npm run worker:media
     depends_on:
+      - typesense
       - kvrocks
       - redis
     environment:
@@ -40,6 +54,11 @@ services:
       THUMB_KV_PREFIX: ${THUMB_KV_PREFIX:-travel-photo-album:thumb:v1}
       THUMB_TARGET_WIDTH: ${THUMB_TARGET_WIDTH:-256}
       REDIS_FOLDER_CACHE_TTL_SECONDS: ${REDIS_FOLDER_CACHE_TTL_SECONDS:-0}
+      TYPESENSE_PROTOCOL: ${MEDIA_WORKER_TYPESENSE_PROTOCOL:-${TYPESENSE_PROTOCOL:-http}}
+      TYPESENSE_HOST: ${MEDIA_WORKER_TYPESENSE_HOST:-typesense}
+      TYPESENSE_PORT: ${MEDIA_WORKER_TYPESENSE_PORT:-${TYPESENSE_PORT:-8108}}
+      TYPESENSE_API_KEY: ${MEDIA_WORKER_TYPESENSE_API_KEY:-${TYPESENSE_API_KEY:-change-me-typesense-key}}
+      TYPESENSE_COLLECTION: ${MEDIA_WORKER_TYPESENSE_COLLECTION:-${TYPESENSE_COLLECTION:-travel-photo-album-media}}
     restart: unless-stopped
     volumes:
       - ./data:/app/data
@@ -78,6 +97,7 @@ services:
     env_file:
       - .env
     depends_on:
+      - typesense
       - kvrocks
       - redis
     environment:
@@ -93,6 +113,11 @@ services:
       OLLAMA_BASE_URL: ${DESCRIPTION_WORKER_OLLAMA_BASE_URL:-http://127.0.0.1:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-}
       OLLAMA_CAPTION_PROMPT: ${OLLAMA_CAPTION_PROMPT:-}
+      TYPESENSE_PROTOCOL: ${DESCRIPTION_WORKER_TYPESENSE_PROTOCOL:-${TYPESENSE_PROTOCOL:-http}}
+      TYPESENSE_HOST: ${DESCRIPTION_WORKER_TYPESENSE_HOST:-typesense}
+      TYPESENSE_PORT: ${DESCRIPTION_WORKER_TYPESENSE_PORT:-${TYPESENSE_PORT:-8108}}
+      TYPESENSE_API_KEY: ${DESCRIPTION_WORKER_TYPESENSE_API_KEY:-${TYPESENSE_API_KEY:-change-me-typesense-key}}
+      TYPESENSE_COLLECTION: ${DESCRIPTION_WORKER_TYPESENSE_COLLECTION:-${TYPESENSE_COLLECTION:-travel-photo-album-media}}
     restart: unless-stopped
     volumes:
       - ./data:/app/data
@@ -124,5 +149,58 @@ services:
         - action: rebuild
           path: ./docker/description-worker/entrypoint.sh
 
+  search-indexer:
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile
+    env_file:
+      - .env
+    command: ["sh", "/app/docker/search-indexer/entrypoint.sh"]
+    depends_on:
+      - typesense
+      - kvrocks
+    environment:
+      REDIS_URL: ${SEARCH_INDEXER_REDIS_URL:-redis://kvrocks:6666}
+      THUMB_KV_URL: ${SEARCH_INDEXER_THUMB_KV_URL:-redis://kvrocks:6666}
+      SEARCH_INDEX_INTERVAL_SECONDS: ${SEARCH_INDEX_INTERVAL_SECONDS:-3600}
+      REDIS_FOLDER_CACHE_TTL_SECONDS: ${REDIS_FOLDER_CACHE_TTL_SECONDS:-0}
+      TYPESENSE_PROTOCOL: ${SEARCH_INDEXER_TYPESENSE_PROTOCOL:-${TYPESENSE_PROTOCOL:-http}}
+      TYPESENSE_HOST: ${SEARCH_INDEXER_TYPESENSE_HOST:-typesense}
+      TYPESENSE_PORT: ${SEARCH_INDEXER_TYPESENSE_PORT:-${TYPESENSE_PORT:-8108}}
+      TYPESENSE_API_KEY: ${SEARCH_INDEXER_TYPESENSE_API_KEY:-${TYPESENSE_API_KEY:-change-me-typesense-key}}
+      TYPESENSE_COLLECTION: ${SEARCH_INDEXER_TYPESENSE_COLLECTION:-${TYPESENSE_COLLECTION:-travel-photo-album-media}}
+      TYPESENSE_HEALTH_TIMEOUT_SECONDS: ${TYPESENSE_HEALTH_TIMEOUT_SECONDS:-60}
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - type: bind
+        source: ${MEDIA_ROOT_HOST_PATH:-/Volumes/photo}
+        target: ${MEDIA_ROOT_CONTAINER_PATH:-/media/nas/photo}
+        read_only: true
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./lib
+          target: /app/lib
+        - action: sync+restart
+          path: ./scripts
+          target: /app/scripts
+        - action: sync+restart
+          path: ./docker/search-indexer/entrypoint.sh
+          target: /app/docker/search-indexer/entrypoint.sh
+        - action: sync+restart
+          path: ./config.json
+          target: /app/config.json
+        - action: sync+restart
+          path: ./.env
+          target: /app/.env
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./yarn.lock
+        - action: rebuild
+          path: ./docker/worker/Dockerfile
+
 volumes:
   ollama_data:
+  typesense_data:

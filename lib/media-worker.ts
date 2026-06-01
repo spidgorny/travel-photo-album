@@ -11,6 +11,7 @@ import {
 } from "./description-jobs.ts";
 import {
 	buildImageMetaData,
+	getStoredMetaDate,
 	normalizeStoredDescription,
 	readStoredMetaForFile,
 	writeStoredMetaForFile,
@@ -18,6 +19,7 @@ import {
 } from "./file-meta.ts";
 import { joinSectionPath } from "./files.ts";
 import { isAutoDescriptionEnabled } from "./image-description.ts";
+import { upsertSearchEntryFromStoredMeta } from "./search-index.ts";
 import {
 thumbJobActions,
 thumbQueueName,
@@ -211,6 +213,28 @@ try {
 }
 }
 
+async function runBestEffortPipelineStep(steps, label, action) {
+	const startedAt = Date.now();
+	try {
+		const value = await action();
+		steps.push({
+			label,
+			status: "done",
+			durationMs: Date.now() - startedAt,
+		});
+		return value;
+	} catch (error) {
+		steps.push({
+			label,
+			status: "failed",
+			durationMs: Date.now() - startedAt,
+			detail: error instanceof Error ? error.message : String(error),
+		});
+		console.warn(`Non-fatal media worker step failed: ${label}`, error);
+		return null;
+	}
+}
+
 function addPipelineStep(steps, label, status, detail) {
 steps.push({
 	label,
@@ -218,6 +242,15 @@ steps.push({
 	durationMs: 0,
 	detail,
 });
+}
+
+function addMeasuredPipelineStep(steps, label, status, durationMs, detail) {
+	steps.push({
+		label,
+		status,
+		durationMs,
+		detail,
+	});
 }
 
 function withPipeline(result, steps) {
@@ -259,6 +292,7 @@ invariant(false, `no handler for ${resolvedJobName}`);
 
 async function storeImageMetadata(payload) {
 const steps = createPipelineSteps();
+const sectionId = Number(payload?.sectionId);
 const section = resolveSection(payload?.sectionId, payload?.section);
 const filePath = normalizeFilePath(payload?.filePath);
 if (getMediaKind(filePath) !== "image") {
@@ -269,8 +303,15 @@ if (getMediaKind(filePath) !== "image") {
 		reason: "unsupported-media",
 	}, steps);
 }
+const metaData = {
+	...(payload?.metaData ?? {}),
+	date: getStoredMetaDate(joinSectionPath(section.path, filePath), payload?.metaData ?? {}),
+};
 const storedMeta = await runPipelineStep(steps, "store image metadata", () =>
-	writeStoredMetaForFile(section, filePath, payload?.metaData ?? {}),
+	writeStoredMetaForFile(section, filePath, metaData),
+);
+await runBestEffortPipelineStep(steps, "update search index", () =>
+	upsertSearchEntryFromStoredMeta({ ...section, id: sectionId }, filePath, metaData),
 );
 return withPipeline({
 	action: mediaJobNames.getMetaForFile,
@@ -280,6 +321,7 @@ return withPipeline({
 
 async function storeVideoMetadata(payload) {
 const steps = createPipelineSteps();
+const sectionId = Number(payload?.sectionId);
 const section = resolveSection(payload?.sectionId, payload?.section);
 const filePath = normalizeFilePath(payload?.filePath);
 const videoStream = payload?.data?.streams?.find(
@@ -287,8 +329,16 @@ const videoStream = payload?.data?.streams?.find(
 );
 invariant(videoStream, "video stream not found");
 const COMPUTED = { Width: videoStream.width, Height: videoStream.height };
+const metaData = {
+	...payload.data,
+	COMPUTED,
+	date: getStoredMetaDate(joinSectionPath(section.path, filePath)),
+};
 const storedMeta = await runPipelineStep(steps, "store video metadata", () =>
-	writeStoredMetaForFile(section, filePath, { ...payload.data, COMPUTED }),
+	writeStoredMetaForFile(section, filePath, metaData),
+);
+await runBestEffortPipelineStep(steps, "update search index", () =>
+	upsertSearchEntryFromStoredMeta({ ...section, id: sectionId }, filePath, metaData),
 );
 return withPipeline({
 action: mediaJobNames.storeMetaForVideo,
@@ -340,10 +390,21 @@ async function warmSectionThumb(payload) {
 				sourceBuffer: getImageSourceBuffer ? await getImageSourceBuffer() : undefined,
 				phashSourceBuffer: thumbForPhash?.buffer,
 				existingMeta: storedMeta,
+				onPhashTiming: (timing) =>
+					addMeasuredPipelineStep(
+						steps,
+						timing.label,
+						timing.status,
+						timing.durationMs,
+						timing.detail,
+					),
 			}),
 		);
 		await runPipelineStep(steps, "store refreshed metadata", () =>
 			writeStoredMetaForFile(section, filePath, metaData),
+		);
+		await runBestEffortPipelineStep(steps, "update search index", () =>
+			upsertSearchEntryFromStoredMeta({ ...section, id: sectionId }, filePath, metaData),
 		);
 	} else {
 		addPipelineStep(
@@ -414,10 +475,21 @@ async function warmSectionThumb(payload) {
 			buildImageMetaData(section, filePath, {
 				sourceBuffer: getImageSourceBuffer ? await getImageSourceBuffer() : undefined,
 				phashSourceBuffer: thumbPhashSource,
+				onPhashTiming: (timing) =>
+					addMeasuredPipelineStep(
+						steps,
+						timing.label,
+						timing.status,
+						timing.durationMs,
+						timing.detail,
+					),
 			}),
 		);
 		await runPipelineStep(steps, "store metadata", () =>
 			writeStoredMetaForFile(section, filePath, metaData),
+		);
+		await runBestEffortPipelineStep(steps, "update search index", () =>
+			upsertSearchEntryFromStoredMeta({ ...section, id: sectionId }, filePath, metaData),
 		);
 		if (isDescriptionQueueConfigured()) {
 			await runPipelineStep(steps, "queue description job", () =>
@@ -429,6 +501,7 @@ async function warmSectionThumb(payload) {
 	} else {
 		addPipelineStep(steps, "build image metadata", "skipped", "not an image");
 		addPipelineStep(steps, "store metadata", "skipped", "not an image");
+		addPipelineStep(steps, "update search index", "skipped", "not an image");
 		addPipelineStep(steps, "queue description job", "skipped", "not an image");
 	}
 	return withPipeline({

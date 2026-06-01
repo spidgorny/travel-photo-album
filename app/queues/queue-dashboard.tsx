@@ -6,6 +6,7 @@ import { fetcher } from "../../lib/http";
 import { AppHeader } from "../_components/app-header";
 import type {
 	QueueCounts,
+	QueueDurationHistogramBucket,
 	QueueInfo,
 	QueueProgressResponse,
 	UISection,
@@ -240,6 +241,39 @@ export function QueueDashboard({
 								</div>
 							</div>
 
+							<div className="rounded-[1.5rem] border border-white/10 bg-slate-950/50 p-4 shadow-xl shadow-black/20">
+								<div className="flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+									<div>
+										<h3 className="text-xl font-semibold text-white">Processing time histograms</h3>
+										<p className="mt-2 text-sm text-slate-400">
+											Distribution of preserved successful job runtimes for each queue.
+										</p>
+									</div>
+									<p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+										Sourced from <span className="text-slate-300">/api/queue-info</span>
+									</p>
+								</div>
+								<div className="mt-5 grid gap-5 xl:grid-cols-2">
+									{perQueueStats.some((singleQueue) => singleQueue.durationHistogram.length > 0) ? (
+										perQueueStats
+											.filter((singleQueue) => singleQueue.durationHistogram.length > 0)
+											.map((singleQueue) => (
+												<QueueRuntimeHistogramCard
+													key={`${singleQueue.label}:histogram`}
+													label={singleQueue.label}
+													averageSuccessfulJobTimeMs={singleQueue.averageSuccessfulJobTimeMs}
+													sampledSuccessfulJobs={singleQueue.sampledSuccessfulJobs}
+													durationHistogram={singleQueue.durationHistogram}
+												/>
+											))
+									) : (
+										<div className="rounded-[1.25rem] border border-dashed border-white/10 bg-slate-900/40 px-5 py-6 text-sm text-slate-400 xl:col-span-2">
+											No histogram buckets are available yet. The backend only draws these once preserved completed jobs include runtime timestamps.
+										</div>
+									)}
+								</div>
+							</div>
+
 							{error ? (
 								<ErrorState
 									message="Showing the last queue snapshot."
@@ -348,6 +382,66 @@ function StatCard({
 	);
 }
 
+function QueueRuntimeHistogramCard({
+	label,
+	averageSuccessfulJobTimeMs,
+	sampledSuccessfulJobs,
+	durationHistogram,
+}: {
+	label: string;
+	averageSuccessfulJobTimeMs: number | null;
+	sampledSuccessfulJobs: number;
+	durationHistogram: QueueDurationHistogramBucket[];
+}) {
+	const maxCount = Math.max(...durationHistogram.map((bucket) => bucket.count), 1);
+
+	return (
+		<div className="rounded-[1.5rem] border border-white/10 bg-slate-950/50 p-4 shadow-xl shadow-black/20">
+			<div className="flex flex-wrap items-end justify-between gap-3">
+				<div>
+					<h3 className="text-lg font-semibold capitalize text-white">{label} runtime histogram</h3>
+					<p className="mt-2 text-sm text-slate-400">
+						Typical successful job times from {formatNumber(sampledSuccessfulJobs)} preserved jobs,
+						centered around the average runtime.
+					</p>
+				</div>
+				<div className="text-right">
+					<p className="text-xs uppercase tracking-[0.18em] text-slate-500">Average success time</p>
+					<p className="mt-2 text-xl font-semibold text-white">
+						{formatDuration(averageSuccessfulJobTimeMs)}
+					</p>
+				</div>
+			</div>
+			<div className="mt-5 flex h-48 items-stretch gap-2">
+				{durationHistogram.map((bucket) => {
+					const heightPercent = bucket.count > 0 ? Math.max((bucket.count / maxCount) * 100, 8) : 0;
+					return (
+						<div
+							key={`${bucket.startMs}-${bucket.endMs}`}
+							className="flex h-full min-w-0 flex-1 flex-col items-center gap-2"
+						>
+							<div className="text-[11px] text-slate-400">{formatNumber(bucket.count)}</div>
+							<div className="flex w-full flex-1 items-end overflow-hidden rounded-md bg-slate-900/90 ring-1 ring-white/10">
+								<div
+									className="w-full rounded-t-md bg-gradient-to-t from-sky-500 via-sky-400 to-cyan-300 shadow-[0_0_18px_rgba(56,189,248,0.35)]"
+									style={{ height: `${heightPercent}%` }}
+									title={`${formatHistogramRange(bucket)}: ${formatNumber(bucket.count)} jobs`}
+								/>
+							</div>
+							<div className="text-center text-[10px] leading-4 text-slate-500">
+								{formatHistogramTick(bucket)}
+							</div>
+						</div>
+					);
+				})}
+			</div>
+			<p className="mt-3 text-xs text-slate-500">
+				Bars show successful jobs per runtime bucket; outer buckets absorb rare outliers so the chart stays focused on typical runtimes.
+			</p>
+		</div>
+	);
+}
+
 function formatNumber(value: number) {
 	return new Intl.NumberFormat().format(value);
 }
@@ -380,6 +474,41 @@ function formatDuration(value: number | null) {
 	const minutes = Math.floor(seconds / 60);
 	const remainingSeconds = seconds - minutes * 60;
 	return `${minutes}m ${remainingSeconds.toFixed(0)}s`;
+}
+
+function formatDurationTick(valueMs: number) {
+	if (valueMs < 1000) {
+		return `${Math.round(valueMs)}ms`;
+	}
+	const seconds = valueMs / 1000;
+	if (seconds < 60) {
+		return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+	}
+	const minutes = seconds / 60;
+	if (minutes < 10) {
+		return `${minutes.toFixed(1)}m`;
+	}
+	return `${Math.round(minutes)}m`;
+}
+
+function formatHistogramTick(bucket: QueueDurationHistogramBucket) {
+	if (bucket.includesLowerTail) {
+		return `<=${formatDurationTick(bucket.endMs)}`;
+	}
+	if (bucket.includesUpperTail) {
+		return `>=${formatDurationTick(bucket.startMs)}`;
+	}
+	return formatDurationTick(bucket.endMs);
+}
+
+function formatHistogramRange(bucket: QueueDurationHistogramBucket) {
+	if (bucket.includesLowerTail) {
+		return `<=${formatDurationTick(bucket.endMs)}`;
+	}
+	if (bucket.includesUpperTail) {
+		return `>=${formatDurationTick(bucket.startMs)}`;
+	}
+	return `${formatDurationTick(bucket.startMs)}–${formatDurationTick(bucket.endMs)}`;
 }
 
 function getProcessedCount(counts: QueueCounts) {

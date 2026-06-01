@@ -6,11 +6,11 @@ import {
 } from "./file-meta.ts";
 import type { StoredDirectoryMetaEntry } from "./files-types.ts";
 import {
-	getIndexedMatchesForFolder,
-	searchIndexedLibrary,
+	getMatchingFilesForFolder,
+	searchLibrary,
 	type SearchResultGroup,
 	type SearchSection,
-} from "./search-index.ts";
+} from "./search-backend.ts";
 
 export function normalizeSearchQuery(value: string | null | undefined) {
 	const normalized = value?.trim().toLocaleLowerCase();
@@ -27,7 +27,7 @@ export function fileMetaMatchesSearchQuery(
 export async function filterFilesBySearchQuery<
 	TFile extends { path?: string; dirPath?: string },
 >(section: ConfigSection, files: TFile[], searchQuery: string): Promise<TFile[]> {
-	const indexedMatches = getIndexedMatchesForFolder(
+	const indexedMatches = await getMatchingFilesForFolder(
 		(section as ConfigSection & { id?: number }).id ?? -1,
 		normalizeFolderPath(
 			String(files[0]?.dirPath ?? files[0]?.path ?? "")
@@ -74,7 +74,7 @@ export async function searchPhotoLibrary(
 		return [];
 	}
 
-	return searchIndexedLibrary(sections, searchQuery);
+	return searchLibrary(sections, searchQuery);
 }
 
 function getFileSearchTerms(fileMeta: StoredDirectoryMetaEntry | null | undefined) {

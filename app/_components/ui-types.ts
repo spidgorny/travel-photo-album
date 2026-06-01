@@ -91,6 +91,14 @@ export interface QueueCounts {
 	paused: number;
 }
 
+export interface QueueDurationHistogramBucket {
+	startMs: number;
+	endMs: number;
+	count: number;
+	includesLowerTail?: boolean;
+	includesUpperTail?: boolean;
+}
+
 export interface QueueInfo {
 	configured: boolean;
 	connectionUrl: string | null;
@@ -110,6 +118,7 @@ export interface QueueInfo {
 		counts: QueueCounts;
 		averageSuccessfulJobTimeMs: number | null;
 		sampledSuccessfulJobs: number;
+		durationHistogram: QueueDurationHistogramBucket[];
 	}>;
 }
 

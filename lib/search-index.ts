@@ -1,14 +1,14 @@
-import fs from "fs";
-import path from "path";
-import { DatabaseSync } from "node:sqlite";
-import type { ConfigSection } from "./config.ts";
-import { readStoredMetaDirectory } from "./file-meta.ts";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+
+import config, { type ConfigSection } from "./config.ts";
 import {
-	formatDayKey,
-	getFileDate,
-	getFilteredFiles,
-	joinSectionPath,
-} from "./files.ts";
+	listStoredMetaFilePaths,
+	readStoredMetaDirectory,
+} from "./file-meta.ts";
+import type { StoredDirectoryMetaEntry } from "./files-types.ts";
+import { formatDayKey, getFileDate } from "./files.ts";
 
 export interface SearchSection extends ConfigSection {
 	id: number;
@@ -33,463 +33,1010 @@ interface SearchIndexEntryInput {
 	date: string;
 	filePath: string;
 	fileName: string;
-	description: string | null;
-	locationLabel: string | null;
-	locality: string | null;
-	countryName: string | null;
-	countryIso2: string | null;
+	description: string;
+	locationLabel: string;
+	locality: string;
+	countryName: string;
+	countryIso2: string;
 }
 
-const defaultSearchIndexPath = path.join(
-	/* turbopackIgnore: true */ process.cwd(),
-	"data",
-	"search-index.sqlite",
-);
-const searchIndexPath = process.env.SEARCH_INDEX_PATH?.trim() || defaultSearchIndexPath;
-
-let database: DatabaseSync | null = null;
-
-export function getSearchIndexPath() {
-	return searchIndexPath;
+interface SearchEntryDocument extends SearchIndexEntryInput {
+	id: string;
+	folderKey: string;
+	groupKey: string;
 }
 
-export function searchIndexExists() {
-	return fs.existsSync(searchIndexPath);
+interface SearchGroupDocument {
+	id: string;
+	group_key: string;
+	section_id: number;
+	section_name: string;
+	folder: string;
+	folder_key: string;
+	date: string;
+	count: number;
+	preview_files: string[];
+	locations: string[];
 }
 
-export function closeSearchIndex() {
-	database?.close();
-	database = null;
+interface SearchHit<TDocument> {
+	document?: TDocument;
 }
 
-export function searchIndexedLibrary(
-	sections: SearchSection[],
-	query: string,
-	limit = 200,
-): SearchResultGroup[] {
-	if (!searchIndexExists()) {
-		return [];
+interface SearchGroupedHit<TDocument> {
+	found?: number;
+	hits?: Array<SearchHit<TDocument>>;
+}
+
+interface SearchResponse<TDocument> {
+	hits?: Array<SearchHit<TDocument>>;
+	grouped_hits?: Array<SearchGroupedHit<TDocument>>;
+	num_documents?: number;
+}
+
+interface TypesenseConfig {
+	apiKey: string;
+	baseUrl: string;
+	entriesCollection: string;
+	groupsCollection: string;
+}
+
+interface GroupAccumulator {
+	sectionId: number;
+	sectionName: string;
+	folder: string;
+	date: string;
+	filePaths: string[];
+	locationCounts: Map<string, number>;
+}
+
+const SEARCH_QUERY_FIELDS = [
+	"description",
+	"location_label",
+	"locality",
+	"country_name",
+	"country_iso2",
+];
+const DEFAULT_ENTRIES_COLLECTION = "photo_search_entries";
+const DEFAULT_GROUPS_COLLECTION = "photo_search_groups";
+const IMPORT_BATCH_SIZE = 500;
+const PAGE_SIZE = 250;
+const DEFAULT_GROUP_LIMIT = 200;
+
+class TypesenseHttpError extends Error {
+	status: number;
+	body: string;
+
+	constructor(
+		status: number,
+		body: string,
+		message = `Typesense request failed with status ${status}`,
+	) {
+		super(message);
+		this.status = status;
+		this.body = body;
+	}
+}
+
+function sha1(value: string) {
+	return crypto.createHash("sha1").update(value).digest("hex");
+}
+
+function getTypesenseConfig(): TypesenseConfig | null {
+	const apiKey = process.env.TYPESENSE_API_KEY?.trim();
+	if (!apiKey) {
+		return null;
 	}
 
-	const sectionIds = sections
-		.map((section) => section.id)
-		.filter((sectionId) => Number.isInteger(sectionId));
-	if (!sectionIds.length) {
-		return [];
+	const entriesCollection =
+		process.env.TYPESENSE_SEARCH_ENTRIES_COLLECTION?.trim() ||
+		DEFAULT_ENTRIES_COLLECTION;
+	const groupsCollection =
+		process.env.TYPESENSE_SEARCH_GROUPS_COLLECTION?.trim() || DEFAULT_GROUPS_COLLECTION;
+	const explicitUrl = process.env.TYPESENSE_URL?.trim();
+	if (explicitUrl) {
+		return {
+			apiKey,
+			baseUrl: explicitUrl.replace(/\/+$/, ""),
+			entriesCollection,
+			groupsCollection,
+		};
 	}
 
-	const ftsQuery = buildFtsQuery(query);
-	if (!ftsQuery) {
-		return [];
+	const host = process.env.TYPESENSE_HOST?.trim();
+	if (!host) {
+		return null;
 	}
 
-	const db = openSearchIndex();
-	const sectionPlaceholders = sectionIds.map(() => "?").join(", ");
-	const groups = db
-		.prepare(
-			`
-			WITH matched_groups AS (
-				SELECT
-					e.section_id AS sectionId,
-					e.section_name AS sectionName,
-					e.folder AS folder,
-					e.date AS date,
-					COUNT(*) AS matchingFileCount
-				FROM search_entries e
-				JOIN search_entries_fts f ON f.rowid = e.id
-				WHERE search_entries_fts MATCH ? AND e.section_id IN (${sectionPlaceholders})
-				GROUP BY e.section_id, e.section_name, e.folder, e.date
-				ORDER BY e.date DESC, e.section_name ASC, e.folder ASC
-				LIMIT ?
-			)
-			SELECT
-				mg.sectionId,
-				mg.sectionName,
-				mg.folder,
-				mg.date,
-				mg.matchingFileCount,
-				(
-					SELECT COUNT(*)
-					FROM search_entries entries
-					WHERE entries.section_id = mg.sectionId
-						AND entries.folder = mg.folder
-						AND entries.date = mg.date
-				) AS count,
-				(
-					SELECT json_group_array(file_path)
-					FROM (
-						SELECT file_path
-						FROM search_entries entries
-						WHERE entries.section_id = mg.sectionId
-							AND entries.folder = mg.folder
-							AND entries.date = mg.date
-						ORDER BY file_path ASC
-						LIMIT 4
-					)
-				) AS previewFilesJson,
-				(
-					SELECT json_group_array(label)
-					FROM (
-						SELECT location_label AS label
-						FROM search_entries entries
-						WHERE entries.section_id = mg.sectionId
-							AND entries.folder = mg.folder
-							AND entries.date = mg.date
-							AND entries.location_label IS NOT NULL
-							AND entries.location_label != ''
-						GROUP BY location_label
-						ORDER BY COUNT(*) DESC, label ASC
-						LIMIT 3
-					)
-				) AS locationsJson
-			FROM matched_groups mg
-			ORDER BY mg.date DESC, mg.sectionName ASC, mg.folder ASC
-		`,
-		)
-		.all(ftsQuery, ...sectionIds, limit) as Array<{
-		sectionId: number;
-		sectionName: string;
-		folder: string;
-		date: string;
-		count: number;
-		matchingFileCount: number;
-		previewFilesJson: string | null;
-		locationsJson: string | null;
-	}>;
+	const protocol = process.env.TYPESENSE_PROTOCOL?.trim() || "http";
+	const port = process.env.TYPESENSE_PORT?.trim();
+	return {
+		apiKey,
+		baseUrl: `${protocol}://${host}${port ? `:${port}` : ""}`,
+		entriesCollection,
+		groupsCollection,
+	};
+}
 
-	return groups.map<SearchResultGroup>((group) => ({
-		sectionId: group.sectionId,
-		sectionName: group.sectionName,
-		folder: group.folder,
-		date: group.date,
-		count: Number(group.count) || 0,
-		matchingFileCount: Number(group.matchingFileCount) || 0,
-		previewFiles: parseJsonArray(group.previewFilesJson),
-		locations: parseJsonArray(group.locationsJson),
+function requireTypesenseConfig() {
+	const typesense = getTypesenseConfig();
+	if (!typesense) {
+		throw new Error(
+			"Typesense search index requires TYPESENSE_API_KEY and TYPESENSE_URL or TYPESENSE_HOST",
+		);
+	}
+	return typesense;
+}
+
+function getDefaultSections(): SearchSection[] {
+	return (Array.isArray(config.sections) ? config.sections : []).map((section, index) => ({
+		...section,
+		id: index,
+		name: section.name,
 	}));
 }
 
-export function getIndexedMatchesForFolder(
-	sectionId: number,
-	folder: string,
-	query: string,
-): Set<string> | null {
-	if (!searchIndexExists() || !Number.isInteger(sectionId) || sectionId < 0) {
-		return null;
-	}
+function normalizeQuery(query: string) {
+	return query.trim().replace(/\s+/g, " ").toLowerCase();
+}
 
-	const ftsQuery = buildFtsQuery(query);
-	if (!ftsQuery) {
-		return new Set();
-	}
+function readString(value: unknown) {
+	return typeof value === "string" ? value : "";
+}
 
-	const rows = openSearchIndex()
-		.prepare(
-			`
-			SELECT e.file_name AS fileName
-			FROM search_entries e
-			JOIN search_entries_fts f ON f.rowid = e.id
-			WHERE search_entries_fts MATCH ? AND e.section_id = ? AND e.folder = ?
-		`,
-		)
-		.all(ftsQuery, sectionId, folder) as Array<{ fileName: string }>;
+function trimString(value: unknown) {
+	return readString(value).trim();
+}
 
-	return new Set(
-		rows
-			.map((row) => row.fileName)
-			.filter((fileName): fileName is string => typeof fileName === "string" && fileName.length > 0),
+function buildFolderKey(folder: string) {
+	return sha1(folder);
+}
+
+function buildGroupKey(sectionId: number, folder: string, date: string) {
+	return sha1(`${sectionId}:${folder}:${date}`);
+}
+
+function buildDocumentId(sectionId: number, filePath: string) {
+	return sha1(`${sectionId}:${filePath}`);
+}
+
+function buildLocationLabel(fileMeta: StoredDirectoryMetaEntry) {
+	const record = fileMeta as Record<string, unknown>;
+	return (
+		fileMeta.location?.label ||
+		trimString(record.descriptionLocation) ||
+		trimString(record.descriptionCountry) ||
+		fileMeta.location?.countryName ||
+		trimString(record.countryName) ||
+		trimString(record.country) ||
+		fileMeta.location?.locality ||
+		trimString(record.locality) ||
+		fileMeta.location?.countryIso2 ||
+		trimString(record.countryCode)
 	);
 }
 
-export async function rebuildSearchIndex(
-	sections: SearchSection[],
-	options: { replaceAll?: boolean } = {},
-) {
-	const db = openSearchIndex();
-	const replaceAll = options.replaceAll !== false;
-	if (replaceAll) {
-		db.exec("DELETE FROM search_entries_fts; DELETE FROM search_entries;");
+function buildSearchEntryInput(
+	section: SearchSection,
+	filePath: string,
+	fileMeta: StoredDirectoryMetaEntry,
+	fallbackDate?: string,
+): SearchIndexEntryInput | null {
+	const record = fileMeta as Record<string, unknown>;
+	const description = trimString(fileMeta.description);
+	const locationLabel = buildLocationLabel(fileMeta);
+	if (!description && !locationLabel) {
+		return null;
 	}
 
-	for (const section of sections) {
-		deleteSectionEntries(section.id);
-		await indexSection(section);
+	const fileName = path.posix.basename(filePath);
+	const inferredDate = getFileDate(trimString(record.baseName) || fileName, null);
+	const date = trimString(fileMeta.date) || (inferredDate ? formatDayKey(inferredDate) : fallbackDate);
+	if (!date) {
+		return null;
 	}
 
-	return countSearchEntries();
+	return {
+		sectionId: section.id,
+		sectionName: section.name,
+		folder: path.posix.dirname(filePath),
+		date,
+		filePath,
+		fileName,
+		description,
+		locationLabel,
+		locality: trimString(fileMeta.location?.locality || record.locality),
+		countryName: trimString(
+			fileMeta.location?.countryName || record.countryName || record.country,
+		),
+		countryIso2: trimString(
+			fileMeta.location?.countryIso2 || record.countryCode,
+		).toUpperCase(),
+	};
 }
 
-export function countSearchEntries() {
-	const row = openSearchIndex()
-		.prepare("SELECT COUNT(*) AS count FROM search_entries")
-		.get() as { count: number };
-	return Number(row?.count) || 0;
+function toSearchEntryDocument(entry: SearchIndexEntryInput): SearchEntryDocument {
+	return {
+		...entry,
+		id: buildDocumentId(entry.sectionId, entry.filePath),
+		folderKey: buildFolderKey(entry.folder),
+		groupKey: buildGroupKey(entry.sectionId, entry.folder, entry.date),
+	};
 }
 
-function openSearchIndex() {
-	if (!database) {
-		fs.mkdirSync(path.dirname(searchIndexPath), { recursive: true });
-		database = new DatabaseSync(searchIndexPath);
-		database.exec(`
-			PRAGMA journal_mode = WAL;
-			PRAGMA synchronous = NORMAL;
-			PRAGMA busy_timeout = 5000;
-			CREATE TABLE IF NOT EXISTS search_entries (
-				id INTEGER PRIMARY KEY,
-				section_id INTEGER NOT NULL,
-				section_name TEXT NOT NULL,
-				folder TEXT NOT NULL,
-				date TEXT NOT NULL,
-				file_path TEXT NOT NULL UNIQUE,
-				file_name TEXT NOT NULL,
-				description TEXT,
-				location_label TEXT,
-				locality TEXT,
-				country_name TEXT,
-				country_iso2 TEXT
-			);
-			CREATE INDEX IF NOT EXISTS search_entries_section_folder_date_idx
-				ON search_entries(section_id, folder, date);
-			CREATE INDEX IF NOT EXISTS search_entries_date_idx
-				ON search_entries(date);
-			CREATE VIRTUAL TABLE IF NOT EXISTS search_entries_fts USING fts5(
-				file_path UNINDEXED,
-				description,
-				location_label,
-				locality,
-				country_name,
-				country_iso2,
-				tokenize = 'unicode61 remove_diacritics 2'
-			);
-		`);
+function toTypesenseEntryDocument(entry: SearchEntryDocument) {
+	return {
+		id: entry.id,
+		section_id: entry.sectionId,
+		section_name: entry.sectionName,
+		folder: entry.folder,
+		folder_key: entry.folderKey,
+		date: entry.date,
+		file_path: entry.filePath,
+		file_name: entry.fileName,
+		description: entry.description,
+		location_label: entry.locationLabel,
+		locality: entry.locality,
+		country_name: entry.countryName,
+		country_iso2: entry.countryIso2,
+		group_key: entry.groupKey,
+	};
+}
+
+function fromTypesenseEntryDocument(document: Record<string, unknown>): SearchEntryDocument | null {
+	const sectionId = Number(document.section_id);
+	const sectionName = trimString(document.section_name);
+	const folder = trimString(document.folder);
+	const date = trimString(document.date);
+	const filePath = trimString(document.file_path);
+	const fileName = trimString(document.file_name);
+	if (
+		!Number.isFinite(sectionId) ||
+		!sectionName ||
+		!folder ||
+		!date ||
+		!filePath ||
+		!fileName
+	) {
+		return null;
 	}
 
-	return database;
+	return {
+		id: trimString(document.id) || buildDocumentId(sectionId, filePath),
+		sectionId,
+		sectionName,
+		folder,
+		date,
+		filePath,
+		fileName,
+		description: trimString(document.description),
+		locationLabel: trimString(document.location_label),
+		locality: trimString(document.locality),
+		countryName: trimString(document.country_name),
+		countryIso2: trimString(document.country_iso2),
+		folderKey: trimString(document.folder_key) || buildFolderKey(folder),
+		groupKey: trimString(document.group_key) || buildGroupKey(sectionId, folder, date),
+	};
 }
 
-async function indexSection(section: SearchSection) {
-	const pendingFolders: string[][] = [[]];
+function buildGroupDocumentFromEntries(
+	entries: SearchEntryDocument[],
+): SearchGroupDocument | null {
+	if (entries.length === 0) {
+		return null;
+	}
 
-	while (pendingFolders.length > 0) {
-		const folder = pendingFolders.pop() ?? [];
-		let entries;
-		try {
-			entries = await getFilteredFiles(section, folder);
-		} catch (error) {
-			console.warn(
-				`Skipping search indexing for collection "${section.name}" because its source path is unavailable.`,
-				error,
-			);
-			return;
-		}
-
-		const childFolders = entries
-			.filter((entry) => entry.isDir)
-			.map((entry) => [...folder, entry.path]);
-		pendingFolders.push(...childFolders);
-
-		const fileEntries = entries.filter((entry) => !entry.isDir);
-		if (!fileEntries.length) {
+	const first = entries[0];
+	const locationCounts = new Map<string, number>();
+	for (const entry of entries) {
+		if (!entry.locationLabel) {
 			continue;
 		}
+		locationCounts.set(
+			entry.locationLabel,
+			(locationCounts.get(entry.locationLabel) || 0) + 1,
+		);
+	}
 
-		const folderPath = normalizeFolderPath(folder.join("/"));
-		const directoryMeta = await readStoredMetaDirectory(section, [...folder, fileEntries[0].path]);
+	return {
+		id: first.groupKey,
+		group_key: first.groupKey,
+		section_id: first.sectionId,
+		section_name: first.sectionName,
+		folder: first.folder,
+		folder_key: first.folderKey,
+		date: first.date,
+		count: entries.length,
+		preview_files: [...entries]
+			.sort((left, right) => left.filePath.localeCompare(right.filePath))
+			.slice(0, 4)
+			.map((entry) => entry.filePath),
+		locations: [...locationCounts.entries()]
+			.sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+			.slice(0, 3)
+			.map(([label]) => label),
+	};
+}
 
-		for (const fileEntry of fileEntries) {
-			const filePath = [...folder, fileEntry.path];
-			const joinedPath = filePath.join("/");
-			const date = getFileDate(
-				joinSectionPath(section.path ?? "", filePath),
-				getStatsDate(fileEntry.stats?.ctime),
+function buildGroupDocumentFromAccumulator(
+	groupKey: string,
+	group: GroupAccumulator,
+): SearchGroupDocument {
+	return {
+		id: groupKey,
+		group_key: groupKey,
+		section_id: group.sectionId,
+		section_name: group.sectionName,
+		folder: group.folder,
+		folder_key: buildFolderKey(group.folder),
+		date: group.date,
+		count: group.filePaths.length,
+		preview_files: [...group.filePaths].sort().slice(0, 4),
+		locations: [...group.locationCounts.entries()]
+			.sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+			.slice(0, 3)
+			.map(([label]) => label),
+	};
+}
+
+function toSearchResultGroup(
+	entry: SearchEntryDocument,
+	group: SearchGroupDocument | null,
+	matchingFileCount: number,
+): SearchResultGroup {
+	return {
+		sectionId: entry.sectionId,
+		sectionName: entry.sectionName,
+		folder: entry.folder,
+		date: entry.date,
+		count: group?.count || matchingFileCount,
+		matchingFileCount,
+		previewFiles: group?.preview_files || [entry.filePath],
+		locations: group?.locations || (entry.locationLabel ? [entry.locationLabel] : []),
+	};
+}
+
+class SectionAccumulator {
+	readonly entries: SearchEntryDocument[] = [];
+	readonly groups = new Map<string, GroupAccumulator>();
+
+	add(entryInput: SearchIndexEntryInput) {
+		const entry = toSearchEntryDocument(entryInput);
+		this.entries.push(entry);
+
+		const current =
+			this.groups.get(entry.groupKey) ||
+			({
+				sectionId: entry.sectionId,
+				sectionName: entry.sectionName,
+				folder: entry.folder,
+				date: entry.date,
+				filePaths: [],
+				locationCounts: new Map<string, number>(),
+			} satisfies GroupAccumulator);
+
+		current.filePaths.push(entry.filePath);
+		if (entry.locationLabel) {
+			current.locationCounts.set(
+				entry.locationLabel,
+				(current.locationCounts.get(entry.locationLabel) || 0) + 1,
 			);
-			if (!date) {
-				continue;
-			}
+		}
+		this.groups.set(entry.groupKey, current);
+	}
 
-			const fileMeta = directoryMeta[fileEntry.path];
-			upsertSearchEntry({
-				sectionId: section.id,
-				sectionName: section.name,
-				folder: folderPath,
-				date: formatDayKey(date),
-				filePath: joinedPath,
-				fileName: fileEntry.path,
-				description: normalizeText(fileMeta?.description),
-				locationLabel: normalizeText(fileMeta?.location?.label),
-				locality: normalizeText(fileMeta?.location?.locality),
-				countryName: normalizeText(fileMeta?.location?.countryName),
-				countryIso2: normalizeText(fileMeta?.location?.countryIso2),
-			});
+	buildGroupDocuments() {
+		return [...this.groups.entries()].map(([groupKey, group]) =>
+			buildGroupDocumentFromAccumulator(groupKey, group),
+		);
+	}
+}
+
+function addEntryFromStoredMeta(
+	accumulator: SectionAccumulator,
+	section: SearchSection,
+	filePath: string,
+	fileMeta: StoredDirectoryMetaEntry,
+	fallbackDate?: string,
+) {
+	const entry = buildSearchEntryInput(section, filePath, fileMeta, fallbackDate);
+	if (entry) {
+		accumulator.add(entry);
+	}
+}
+
+async function requestTypesense(
+	requestPath: string,
+	init: RequestInit = {},
+): Promise<{ response: Response; body: string }> {
+	const typesense = requireTypesenseConfig();
+	const headers = new Headers(init.headers);
+	headers.set("X-TYPESENSE-API-KEY", typesense.apiKey);
+	if (init.body && !headers.has("Content-Type")) {
+		headers.set("Content-Type", "application/json");
+	}
+
+	const response = await fetch(`${typesense.baseUrl}${requestPath}`, {
+		...init,
+		headers,
+	});
+	const body = await response.text();
+	if (!response.ok) {
+		throw new TypesenseHttpError(response.status, body);
+	}
+	return { response, body };
+}
+
+async function requestTypesenseJson<TResponse>(
+	requestPath: string,
+	init: RequestInit = {},
+): Promise<TResponse> {
+	const { body } = await requestTypesense(requestPath, init);
+	return body ? (JSON.parse(body) as TResponse) : ({} as TResponse);
+}
+
+async function collectionExists(collectionName: string) {
+	try {
+		await requestTypesenseJson(`/collections/${encodeURIComponent(collectionName)}`);
+		return true;
+	} catch (error) {
+		if (error instanceof TypesenseHttpError && error.status === 404) {
+			return false;
+		}
+		throw error;
+	}
+}
+
+async function createCollection(
+	collectionName: string,
+	fields: Array<Record<string, unknown>>,
+) {
+	await requestTypesense("/collections", {
+		method: "POST",
+		body: JSON.stringify({
+			name: collectionName,
+			fields,
+		}),
+	});
+}
+
+async function ensureCollections() {
+	const typesense = requireTypesenseConfig();
+
+	if (!(await collectionExists(typesense.entriesCollection))) {
+		await createCollection(typesense.entriesCollection, [
+			{ name: "section_id", type: "int32", facet: true },
+			{ name: "section_name", type: "string", sort: true },
+			{ name: "folder", type: "string", sort: true },
+			{ name: "folder_key", type: "string", facet: true },
+			{ name: "date", type: "string", sort: true },
+			{ name: "file_path", type: "string", sort: true },
+			{ name: "file_name", type: "string", sort: true },
+			{ name: "description", type: "string" },
+			{ name: "location_label", type: "string" },
+			{ name: "locality", type: "string" },
+			{ name: "country_name", type: "string" },
+			{ name: "country_iso2", type: "string" },
+			{ name: "group_key", type: "string", facet: true },
+		]);
+	}
+
+	if (!(await collectionExists(typesense.groupsCollection))) {
+		await createCollection(typesense.groupsCollection, [
+			{ name: "group_key", type: "string", facet: true },
+			{ name: "section_id", type: "int32", facet: true },
+			{ name: "section_name", type: "string", sort: true },
+			{ name: "folder", type: "string", sort: true },
+			{ name: "folder_key", type: "string", facet: true },
+			{ name: "date", type: "string", sort: true },
+			{ name: "count", type: "int32" },
+			{ name: "preview_files", type: "string[]" },
+			{ name: "locations", type: "string[]" },
+		]);
+	}
+}
+
+async function dropCollection(collectionName: string) {
+	try {
+		await requestTypesense(`/collections/${encodeURIComponent(collectionName)}`, {
+			method: "DELETE",
+		});
+	} catch (error) {
+		if (!(error instanceof TypesenseHttpError) || error.status !== 404) {
+			throw error;
 		}
 	}
 }
 
-function deleteSectionEntries(sectionId: number) {
-	const db = openSearchIndex();
-	const rows = db
-		.prepare("SELECT id FROM search_entries WHERE section_id = ?")
-		.all(sectionId) as Array<{ id: number }>;
-	const deleteEntryStatement = db.prepare("DELETE FROM search_entries WHERE section_id = ?");
-	const deleteFtsStatement = db.prepare("DELETE FROM search_entries_fts WHERE rowid = ?");
-
-	for (const row of rows) {
-		deleteFtsStatement.run(row.id);
+async function deleteDocumentsByFilter(collectionName: string, filterBy: string) {
+	try {
+		await requestTypesense(
+			`/collections/${encodeURIComponent(collectionName)}/documents?${new URLSearchParams({
+				filter_by: filterBy,
+			}).toString()}`,
+			{ method: "DELETE" },
+		);
+	} catch (error) {
+		if (!(error instanceof TypesenseHttpError) || error.status !== 404) {
+			throw error;
+		}
 	}
-	deleteEntryStatement.run(sectionId);
 }
 
-function upsertSearchEntry(entry: SearchIndexEntryInput) {
-	const db = openSearchIndex();
-	const existingRow = db
-		.prepare("SELECT id FROM search_entries WHERE file_path = ?")
-		.get(entry.filePath) as { id: number } | undefined;
+async function getDocumentById<TDocument>(
+	collectionName: string,
+	documentId: string,
+): Promise<TDocument | null> {
+	try {
+		return await requestTypesenseJson<TDocument>(
+			`/collections/${encodeURIComponent(collectionName)}/documents/${encodeURIComponent(documentId)}`,
+		);
+	} catch (error) {
+		if (error instanceof TypesenseHttpError && error.status === 404) {
+			return null;
+		}
+		throw error;
+	}
+}
 
-	if (existingRow) {
-		db.prepare(
-			`
-			UPDATE search_entries
-			SET
-				section_id = ?,
-				section_name = ?,
-				folder = ?,
-				date = ?,
-				file_name = ?,
-				description = ?,
-				location_label = ?,
-				locality = ?,
-				country_name = ?,
-				country_iso2 = ?
-			WHERE id = ?
-		`,
-		).run(
-			entry.sectionId,
-			entry.sectionName,
-			entry.folder,
-			entry.date,
-			entry.fileName,
-			entry.description,
-			entry.locationLabel,
-			entry.locality,
-			entry.countryName,
-			entry.countryIso2,
-			existingRow.id,
+async function deleteDocumentById(collectionName: string, documentId: string) {
+	try {
+		await requestTypesense(
+			`/collections/${encodeURIComponent(collectionName)}/documents/${encodeURIComponent(documentId)}`,
+			{ method: "DELETE" },
 		);
-		db.prepare("DELETE FROM search_entries_fts WHERE rowid = ?").run(existingRow.id);
-		db.prepare(
-			`
-			INSERT INTO search_entries_fts(
-				rowid,
-				file_path,
-				description,
-				location_label,
-				locality,
-				country_name,
-				country_iso2
-			) VALUES (?, ?, ?, ?, ?, ?, ?)
-		`,
-		).run(
-			existingRow.id,
-			entry.filePath,
-			entry.description,
-			entry.locationLabel,
-			entry.locality,
-			entry.countryName,
-			entry.countryIso2,
-		);
+	} catch (error) {
+		if (!(error instanceof TypesenseHttpError) || error.status !== 404) {
+			throw error;
+		}
+	}
+}
+
+async function importDocuments<TDocument extends object>(
+	collectionName: string,
+	documents: TDocument[],
+) {
+	if (documents.length === 0) {
 		return;
 	}
 
-	const insertResult = db
-		.prepare(
-			`
-			INSERT INTO search_entries(
-				section_id,
-				section_name,
-				folder,
-				date,
-				file_path,
-				file_name,
-				description,
-				location_label,
-				locality,
-				country_name,
-				country_iso2
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`,
-		)
-		.run(
-			entry.sectionId,
-			entry.sectionName,
-			entry.folder,
-			entry.date,
-			entry.filePath,
-			entry.fileName,
-			entry.description,
-			entry.locationLabel,
-			entry.locality,
-			entry.countryName,
-			entry.countryIso2,
+	for (let index = 0; index < documents.length; index += IMPORT_BATCH_SIZE) {
+		const batch = documents.slice(index, index + IMPORT_BATCH_SIZE);
+		const payload = batch.map((document) => JSON.stringify(document)).join("\n");
+		const { body } = await requestTypesense(
+			`/collections/${encodeURIComponent(collectionName)}/documents/import?action=upsert`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "text/plain" },
+				body: payload,
+			},
 		);
 
-	db.prepare(
-		`
-		INSERT INTO search_entries_fts(
-			rowid,
-			file_path,
-			description,
-			location_label,
-			locality,
-			country_name,
-			country_iso2
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
-	`,
-	).run(
-		Number(insertResult.lastInsertRowid),
-		entry.filePath,
-		entry.description,
-		entry.locationLabel,
-		entry.locality,
-		entry.countryName,
-		entry.countryIso2,
+		const failures = body
+			.split("\n")
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.map((line) => JSON.parse(line) as { success?: boolean; error?: string })
+			.filter((line) => line.success === false);
+		if (failures.length > 0) {
+			throw new Error(failures.map((failure) => failure.error).join("; "));
+		}
+	}
+}
+
+async function searchCollection<TDocument>(
+	collectionName: string,
+	params: Record<string, string>,
+) {
+	return await requestTypesenseJson<SearchResponse<TDocument>>(
+		`/collections/${encodeURIComponent(collectionName)}/documents/search?${new URLSearchParams(params).toString()}`,
 	);
 }
 
-function buildFtsQuery(query: string) {
-	const tokens = normalizeText(query)
-		?.match(/[\p{L}\p{N}]+/gu)
-		?.filter(Boolean);
-	if (!tokens?.length) {
-		return null;
-	}
-
-	return tokens.map((token) => `${token}*`).join(" AND ");
+function getEntrySearchParams(query: string) {
+	return {
+		q: query,
+		query_by: SEARCH_QUERY_FIELDS.join(","),
+		query_by_weights: "10,8,4,3,2",
+		prefix: "true,true,true,true,true",
+		num_typos: "0,0,0,0,0",
+		drop_tokens_threshold: "0",
+	};
 }
 
-function normalizeText(value: unknown) {
-	if (typeof value !== "string") {
-		return null;
+async function listEntriesForGroup(sectionId: number, groupKey: string) {
+	const typesense = requireTypesenseConfig();
+	const entries: SearchEntryDocument[] = [];
+	let page = 1;
+
+	while (true) {
+		const response = await searchCollection<Record<string, unknown>>(
+			typesense.entriesCollection,
+			{
+				q: "*",
+				query_by: "file_name",
+				filter_by: `section_id:=${sectionId}&&group_key:=${groupKey}`,
+				sort_by: "file_path:asc",
+				per_page: String(PAGE_SIZE),
+				page: String(page),
+			},
+		);
+
+		const documents =
+			response.hits
+				?.map((hit) => fromTypesenseEntryDocument(hit.document || {}))
+				.filter((document): document is SearchEntryDocument => Boolean(document)) || [];
+		entries.push(...documents);
+
+		if (documents.length < PAGE_SIZE) {
+			break;
+		}
+		page += 1;
 	}
-	const normalized = value.trim();
-	return normalized.length > 0 ? normalized : null;
+
+	return entries;
 }
 
-function normalizeFolderPath(folder: string) {
-	return folder === "." ? "" : folder;
+async function refreshGroupSummary(sectionId: number, groupKey: string) {
+	const typesense = requireTypesenseConfig();
+	const entries = await listEntriesForGroup(sectionId, groupKey);
+	if (entries.length === 0) {
+		await deleteDocumentById(typesense.groupsCollection, groupKey);
+		return;
+	}
+
+	const groupDocument = buildGroupDocumentFromEntries(entries);
+	if (groupDocument) {
+		await importDocuments(typesense.groupsCollection, [groupDocument]);
+	}
 }
 
-function parseJsonArray(value: string | null) {
-	if (!value) {
-		return [];
+function walkFilesNamed(rootPath: string, targetName: string) {
+	if (!fs.existsSync(rootPath)) {
+		return [] as string[];
 	}
+
+	const matches: string[] = [];
+	const directories = [rootPath];
+	while (directories.length > 0) {
+		const currentDirectory = directories.pop();
+		if (!currentDirectory) {
+			continue;
+		}
+
+		for (const entry of fs.readdirSync(currentDirectory, { withFileTypes: true })) {
+			const entryPath = path.join(currentDirectory, entry.name);
+			if (entry.isDirectory()) {
+				directories.push(entryPath);
+				continue;
+			}
+			if (entry.isFile() && entry.name === targetName) {
+				matches.push(entryPath);
+			}
+		}
+	}
+
+	return matches;
+}
+
+async function indexSectionFromThumbMetaFiles(
+	section: SearchSection,
+	accumulator: SectionAccumulator,
+) {
+	if (!section.thumbPath || !fs.existsSync(section.thumbPath)) {
+		return false;
+	}
+
+	let indexed = false;
+	for (const metaFilePath of walkFilesNamed(section.thumbPath, "meta.json")) {
+		const folderParts = path
+			.relative(section.thumbPath, path.dirname(metaFilePath))
+			.split(path.sep)
+			.filter(Boolean);
+		const storedMeta = await readStoredMetaDirectory(section, folderParts);
+		for (const [relativeFilePath, fileMeta] of Object.entries(storedMeta)) {
+			indexed = true;
+			addEntryFromStoredMeta(accumulator, section, relativeFilePath, fileMeta);
+		}
+	}
+
+	return indexed;
+}
+
+async function indexSectionFromStoredMetaRegistry(
+	section: SearchSection,
+	accumulator: SectionAccumulator,
+) {
+	const filePaths = await listStoredMetaFilePaths(section);
+	if (filePaths.length === 0) {
+		return false;
+	}
+
+	let indexed = false;
+	for (const filePathParts of filePaths) {
+		const filePath = filePathParts.join("/");
+		const storedMeta = await readStoredMetaDirectory(section, filePathParts);
+		const fileMeta = storedMeta[filePathParts[filePathParts.length - 1] || ""];
+		if (!fileMeta) {
+			continue;
+		}
+
+		indexed = true;
+		addEntryFromStoredMeta(accumulator, section, filePath, fileMeta);
+	}
+
+	return indexed;
+}
+
+async function collectSectionDocuments(section: SearchSection) {
+	const accumulator = new SectionAccumulator();
+	const indexed =
+		(await indexSectionFromThumbMetaFiles(section, accumulator)) ||
+		(await indexSectionFromStoredMetaRegistry(section, accumulator));
+
+	return {
+		indexed,
+		entries: accumulator.entries.map(toTypesenseEntryDocument),
+		groups: accumulator.buildGroupDocuments(),
+	};
+}
+
+export function getSearchIndexPath() {
+	const typesense = getTypesenseConfig();
+	return typesense
+		? `${typesense.baseUrl}/collections/${typesense.entriesCollection}`
+		: `typesense:${DEFAULT_ENTRIES_COLLECTION}`;
+}
+
+export function closeSearchIndex() {}
+
+export async function searchIndexExists() {
+	const typesense = getTypesenseConfig();
+	if (!typesense) {
+		return false;
+	}
+
 	try {
-		const parsed = JSON.parse(value) as unknown[];
-		return parsed.filter((item): item is string => typeof item === "string" && item.length > 0);
-	} catch {
-		return [];
+		const [entries, groups] = await Promise.all([
+			collectionExists(typesense.entriesCollection),
+			collectionExists(typesense.groupsCollection),
+		]);
+		return entries && groups;
+	} catch (error) {
+		if (error instanceof TypesenseHttpError && error.status === 404) {
+			return false;
+		}
+		throw error;
 	}
 }
 
-function getStatsDate(value: unknown) {
-	return value instanceof Date ? value : null;
+export async function countSearchEntries() {
+	const typesense = getTypesenseConfig();
+	if (!typesense || !(await searchIndexExists())) {
+		return 0;
+	}
+
+	const collection = await requestTypesenseJson<SearchResponse<Record<string, unknown>>>(
+		`/collections/${encodeURIComponent(typesense.entriesCollection)}`,
+	);
+	return Number(collection.num_documents || 0);
+}
+
+export async function rebuildSearchIndex(
+	sections: SearchSection[] = getDefaultSections(),
+	options: boolean | { replaceAll?: boolean } = true,
+) {
+	const typesense = requireTypesenseConfig();
+	const replaceAll =
+		typeof options === "boolean" ? options : options.replaceAll !== false;
+
+	if (replaceAll) {
+		await Promise.all([
+			dropCollection(typesense.entriesCollection),
+			dropCollection(typesense.groupsCollection),
+		]);
+	}
+
+	await ensureCollections();
+
+	for (const section of sections) {
+		if (!replaceAll) {
+			await Promise.all([
+				deleteDocumentsByFilter(
+					typesense.entriesCollection,
+					`section_id:=${section.id}`,
+				),
+				deleteDocumentsByFilter(
+					typesense.groupsCollection,
+					`section_id:=${section.id}`,
+				),
+			]);
+		}
+
+		const { indexed, entries, groups } = await collectSectionDocuments(section);
+		if (!indexed) {
+			continue;
+		}
+
+		await Promise.all([
+			importDocuments(typesense.entriesCollection, entries),
+			importDocuments(typesense.groupsCollection, groups),
+		]);
+	}
+
+	return await countSearchEntries();
+}
+
+export async function upsertSearchEntryFromStoredMeta(
+	section: SearchSection,
+	filePath: string[],
+	fileMeta: StoredDirectoryMetaEntry,
+	fallbackDate?: string,
+) {
+	const typesense = requireTypesenseConfig();
+	const normalizedFilePath = filePath.join("/");
+	const entryInput = buildSearchEntryInput(
+		section,
+		normalizedFilePath,
+		fileMeta,
+		fallbackDate,
+	);
+	if (!entryInput) {
+		return;
+	}
+
+	await ensureCollections();
+
+	const document = toSearchEntryDocument(entryInput);
+	const previousDocument = await getDocumentById<Record<string, unknown>>(
+		typesense.entriesCollection,
+		document.id,
+	);
+	const previousEntry = previousDocument
+		? fromTypesenseEntryDocument(previousDocument)
+		: null;
+
+	await importDocuments(typesense.entriesCollection, [toTypesenseEntryDocument(document)]);
+	await refreshGroupSummary(document.sectionId, document.groupKey);
+	if (previousEntry && previousEntry.groupKey !== document.groupKey) {
+		await refreshGroupSummary(previousEntry.sectionId, previousEntry.groupKey);
+	}
+}
+
+export async function searchIndexedLibrary(
+	query: string,
+	sections: SearchSection[],
+	limit = DEFAULT_GROUP_LIMIT,
+): Promise<SearchResultGroup[]> {
+	const normalizedQuery = normalizeQuery(query);
+	if (!normalizedQuery) {
+		return [];
+	}
+
+	const typesense = getTypesenseConfig();
+	if (!typesense || !(await searchIndexExists())) {
+		return [];
+	}
+
+	const groupedMatches = (
+		await Promise.all(
+			sections.map(async (section) => {
+				const response = await searchCollection<Record<string, unknown>>(
+					typesense.entriesCollection,
+					{
+						...getEntrySearchParams(normalizedQuery),
+						filter_by: `section_id:=${section.id}`,
+						group_by: "group_key",
+						group_limit: "1",
+						sort_by: "date:desc,section_name:asc,folder:asc",
+						per_page: String(limit),
+						page: "1",
+					},
+				);
+
+				return (
+					response.grouped_hits
+						?.map((group) => {
+							const entry = fromTypesenseEntryDocument(
+								(group.hits?.[0]?.document || {}) as Record<string, unknown>,
+							);
+							if (!entry) {
+								return null;
+							}
+
+							return {
+								entry,
+								matchingFileCount: Number(group.found || group.hits?.length || 0),
+							};
+						})
+						.filter(
+							(
+								match,
+							): match is {
+								entry: SearchEntryDocument;
+								matchingFileCount: number;
+							} => Boolean(match),
+						) || []
+				);
+			}),
+		)
+	)
+		.flat()
+		.sort(
+			(left, right) =>
+				right.entry.date.localeCompare(left.entry.date) ||
+				left.entry.sectionName.localeCompare(right.entry.sectionName) ||
+				left.entry.folder.localeCompare(right.entry.folder),
+		)
+		.slice(0, limit);
+
+	const groupDocuments = new Map(
+		(
+			await Promise.all(
+				groupedMatches.map(async ({ entry }) => {
+					const group = await getDocumentById<SearchGroupDocument>(
+						typesense.groupsCollection,
+						entry.groupKey,
+					);
+					return group ? ([entry.groupKey, group] as const) : null;
+				}),
+			)
+		).filter((group): group is readonly [string, SearchGroupDocument] => Boolean(group)),
+	);
+
+	return groupedMatches.map(({ entry, matchingFileCount }) =>
+		toSearchResultGroup(
+			entry,
+			groupDocuments.get(entry.groupKey) || null,
+			matchingFileCount,
+		),
+	);
+}
+
+export async function getIndexedMatchesForFolder(
+	sectionId: number,
+	folder: string,
+	query: string,
+) {
+	const normalizedQuery = normalizeQuery(query);
+	if (!normalizedQuery) {
+		return null;
+	}
+
+	const typesense = getTypesenseConfig();
+	if (!typesense || !(await searchIndexExists())) {
+		return null;
+	}
+
+	const matches = new Set<string>();
+	const folderKey = buildFolderKey(folder);
+	let page = 1;
+
+	while (true) {
+		const response = await searchCollection<Record<string, unknown>>(
+			typesense.entriesCollection,
+			{
+				...getEntrySearchParams(normalizedQuery),
+				filter_by: `section_id:=${sectionId}&&folder_key:=${folderKey}`,
+				sort_by: "file_name:asc",
+				per_page: String(PAGE_SIZE),
+				page: String(page),
+			},
+		);
+
+		const documents =
+			response.hits
+				?.map((hit) => fromTypesenseEntryDocument(hit.document || {}))
+				.filter((document): document is SearchEntryDocument => Boolean(document)) || [];
+		for (const document of documents) {
+			matches.add(document.fileName);
+		}
+
+		if (documents.length < PAGE_SIZE) {
+			break;
+		}
+		page += 1;
+	}
+
+	return matches;
 }

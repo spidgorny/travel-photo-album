@@ -35,6 +35,7 @@ export interface StoredDirectoryMetaEntry extends Record<string, unknown> {
 		width?: number;
 		height?: number;
 	};
+	date?: string;
 	GPS?: FileGpsCoordinates;
 	location?: FileLocationLabel;
 	description?: string;

@@ -8,7 +8,7 @@ import sharp from "sharp";
 import { getNearestCity } from "offline-geocode-city";
 import invariant from "tiny-invariant";
 import type { ConfigSection } from "./config.ts";
-import { joinSectionPath } from "./files.ts";
+import { formatDayKey, getFileDate, joinSectionPath, parseDayKey } from "./files.ts";
 import { getThumbKvClient, thumbKvPrefix } from "./thumb-store.ts";
 import type {
 	FileGpsCoordinates,
@@ -70,6 +70,14 @@ function buildStoredMetaDirectoryKey(sectionKey: string, directoryPath: string) 
 		.update(JSON.stringify({ sectionKey, directoryPath }))
 		.digest("hex");
 	return `${thumbKvPrefix}:directory-meta:${hash}`;
+}
+
+function buildSearchRegistryKey(sectionKey: string) {
+	const hash = crypto
+		.createHash("sha1")
+		.update(JSON.stringify({ sectionKey, kind: "search-registry" }))
+		.digest("hex");
+	return `${thumbKvPrefix}:search-registry:${hash}`;
 }
 
 function getSectionKeyAliases(section: ConfigSection): string[] {
@@ -179,7 +187,51 @@ export async function writeStoredMetaForFile(
 	for (const metaKey of metaKeys) {
 		await client.set(metaKey, JSON.stringify(metaData));
 	}
+	for (const registryKey of getSearchRegistryKeys(section)) {
+		await client.sAdd(registryKey, filePath.join("/"));
+	}
 	return { metaFile: metaKeys[0], baseName };
+}
+
+function getSearchRegistryKeys(section: ConfigSection): string[] {
+	return getSectionKeyAliases(section).map((sectionKey) => buildSearchRegistryKey(sectionKey));
+}
+
+export async function listStoredMetaFilePaths(section: ConfigSection): Promise<string[][]> {
+	if (section.thumbPath) {
+		return [];
+	}
+
+	const client = await getThumbKvClient();
+	if (!client) {
+		return [];
+	}
+
+	const entries = new Set<string>();
+	for (const registryKey of getSearchRegistryKeys(section)) {
+		const members = await client.sMembers(registryKey);
+		for (const member of members) {
+			if (typeof member === "string" && member.length > 0) {
+				entries.add(member);
+			}
+		}
+	}
+
+	return [...entries]
+		.map((entry) => entry.split("/").filter(Boolean))
+		.filter((entry) => entry.length > 0);
+}
+
+export function getStoredMetaDate(
+	fullPath: string,
+	metaEntry?: StoredDirectoryMetaEntry | null,
+): string | undefined {
+	const storedDate = parseDayKey(typeof metaEntry?.date === "string" ? metaEntry.date : "");
+	if (storedDate) {
+		return storedDate;
+	}
+	const inferredDate = getFileDate(fullPath, null);
+	return inferredDate ? formatDayKey(inferredDate) : undefined;
 }
 
 export function normalizeStoredDescription(value: unknown): string | undefined {
@@ -246,6 +298,12 @@ export async function buildImageMetaData(
 		sourceBuffer?: Buffer;
 		phashSourceBuffer?: Buffer;
 		existingMeta?: StoredDirectoryMetaEntry | null;
+		onPhashTiming?: (timing: {
+			label: string;
+			status: "done" | "failed" | "skipped";
+			durationMs: number;
+			detail?: string;
+		}) => void;
 	} = {},
 ): Promise<ThumbImageMetaData> {
 	invariant(section.path, "section.path");
@@ -257,15 +315,14 @@ export async function buildImageMetaData(
 	const existingMeta = options.existingMeta ?? (await readStoredMetaForFile(section, filePath));
 	const description = normalizeStoredDescription(existingMeta?.description);
 	const phashSourceBuffer = options.phashSourceBuffer ?? options.sourceBuffer;
-	const phash =
-		(phashSourceBuffer ? await buildPerceptualHashFromBuffer(phashSourceBuffer) : null) ??
-		(await buildPerceptualHashFromFile(fullPath)) ??
-		normalizeStoredPhash(existingMeta?.phash);
+	const phash = await buildImagePhash(fullPath, phashSourceBuffer, existingMeta, options.onPhashTiming);
+	const storedDate = getStoredMetaDate(fullPath, existingMeta);
 
 	return {
 		FileName: path.basename(fullPath),
 		MimeType: mime.lookup(fullPath),
 		FileSize: options.sourceBuffer?.length ?? fs.statSync(fullPath).size,
+		date: storedDate,
 		COMPUTED: {
 			Width: dimensions.width,
 			Height: dimensions.height,
@@ -276,6 +333,55 @@ export async function buildImageMetaData(
 		...(gps ? { GPS: gps } : {}),
 		...(location ? { location } : {}),
 	};
+}
+
+async function buildImagePhash(
+	fullPath: string,
+	phashSourceBuffer: Buffer | undefined,
+	existingMeta: StoredDirectoryMetaEntry | null,
+	onPhashTiming?: (timing: {
+		label: string;
+		status: "done" | "failed" | "skipped";
+		durationMs: number;
+		detail?: string;
+	}) => void,
+) {
+	if (phashSourceBuffer) {
+		const startedAt = Date.now();
+		const phashFromBuffer = await buildPerceptualHashFromBuffer(phashSourceBuffer);
+		onPhashTiming?.({
+			label: "calculate pHash from thumbnail",
+			status: phashFromBuffer ? "done" : "failed",
+			durationMs: Date.now() - startedAt,
+			detail: phashFromBuffer ? undefined : "thumbnail hash failed",
+		});
+		if (phashFromBuffer) {
+			return phashFromBuffer;
+		}
+	}
+
+	const startedAt = Date.now();
+	const phashFromFile = await buildPerceptualHashFromFile(fullPath);
+	onPhashTiming?.({
+		label: "calculate pHash from source",
+		status: phashFromFile ? "done" : "failed",
+		durationMs: Date.now() - startedAt,
+		detail: phashFromFile ? undefined : "source hash failed",
+	});
+	if (phashFromFile) {
+		return phashFromFile;
+	}
+
+	const storedPhash = normalizeStoredPhash(existingMeta?.phash);
+	if (storedPhash) {
+		onPhashTiming?.({
+			label: "calculate pHash",
+			status: "skipped",
+			durationMs: 0,
+			detail: "using stored pHash",
+		});
+	}
+	return storedPhash;
 }
 
 export async function hasExifOrientationTransform(
