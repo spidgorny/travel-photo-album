@@ -16,6 +16,7 @@ import {
 	isDescriptionQueueConfigured,
 } from "../lib/description-jobs.ts";
 import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
+import { storeFolderListing } from "../lib/folder-store.ts";
 import {
 	serializeSectionForWorker,
 	thumbJobActions,
@@ -237,6 +238,8 @@ async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
 	console.log(
 		`scan [dir ${scanStats.directories}] ${displayPath} (${boundedEntries.length} entries)`,
 	);
+
+	await storeFolderListing(section, rootSegments, boundedEntries);
 
 	for (const entry of boundedEntries) {
 		const nextPath = [...rootSegments, entry.name];

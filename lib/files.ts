@@ -10,6 +10,10 @@ import type {
 	FileEntryWithOptionalDate,
 	FilteredFileEntry,
 } from "./files-types.ts";
+import {
+	readStoredFolderListing,
+	storeFolderListing,
+} from "./folder-store.ts";
 
 export function joinSectionPath(
 	sectionPath: string,
@@ -25,14 +29,42 @@ export function joinSectionPath(
 	return imagePath;
 }
 
+export function isHiddenPathSegment(segment: string): boolean {
+	return typeof segment === "string" && segment.startsWith(".");
+}
+
+export function hasHiddenPathSegment(filePath: string[] | string): boolean {
+	const segments = Array.isArray(filePath) ? filePath : filePath.split("/");
+	return segments.some((segment) => isHiddenPathSegment(segment));
+}
+
 export async function getFilteredFiles(
 	section: ConfigSection,
 	filePath: string[] = [],
 ): Promise<FilteredFileEntry[]> {
 	invariant(section.path, 'section.path');
-	const imagePath = joinSectionPath(section.path, filePath);
-	console.log("reading", imagePath);
-	let files = await getFiles(imagePath);
+
+	// Try Kvrocks-backed folder listing first (stable across mounts/platforms).
+	const kvListing = await readStoredFolderListing(section, filePath);
+	let files: FilteredFileEntry[];
+
+	if (kvListing) {
+		files = kvListing;
+	} else {
+		const imagePath = joinSectionPath(section.path, filePath);
+		console.log("reading", imagePath);
+		files = await getFiles(imagePath);
+		// Lazily persist to Kvrocks so future reads don't need the filesystem.
+		const kvEntries = files.map((f) => ({
+			name: f.path,
+			isDirectory: () => f.isDir,
+			ctime: f.stats?.ctime instanceof Date ? f.stats.ctime : null,
+			mtime: f.stats?.mtime instanceof Date ? f.stats.mtime : null,
+		}));
+		storeFolderListing(section, filePath, kvEntries).catch((e) => {
+			console.warn("folder-store: lazy write failed:", e?.message ?? e);
+		});
+	}
 
 	if (section.from) {
 		const iFrom = files.findIndex((x) => path.basename(x) === section.from);
@@ -48,6 +80,7 @@ export async function getFilteredFiles(
 			files = files.slice(0, iTill + 1);
 		}
 	}
+	files = files.filter((entry) => !hasHiddenPathSegment(entry.path));
 	return files;
 }
 
@@ -98,7 +131,7 @@ export async function getFilesWithOptionalDates(
 				fullPath: joinSectionPath(section.path, [...imagePath, x.path]),
 				date: getFileDate(
 					joinSectionPath(section.path, [...imagePath, x.path]),
-					x.stats instanceof fs.Stats ? x.stats.ctime : null,
+					x.stats?.ctime instanceof Date ? x.stats.ctime : null,
 				),
 			}));
 

@@ -15,6 +15,7 @@ import {
 	isDescriptionQueueConfigured,
 } from "../lib/description-jobs.ts";
 import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
+import { storeFolderListing } from "../lib/folder-store.ts";
 import {
 hasExifOrientationTransform,
 normalizeStoredDescription,
@@ -228,6 +229,8 @@ async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
 const entries = await readDirectoryEntries(section, rootSegments);
 const boundedEntries = applySectionBounds(entries, section, rootSegments);
 scanStats.directories += 1;
+
+await storeFolderListing(section, rootSegments, boundedEntries);
 
 for (const entry of boundedEntries) {
 const nextPath = [...rootSegments, entry.name];
