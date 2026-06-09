@@ -24,6 +24,7 @@ interface RouteContext {
 }
 
 export async function GET(request: Request, { params }: RouteContext) {
+	const startedAt = Date.now();
 	try {
 		const { slug = [] } = await params;
 		const [sectionInput, ...filePathWithDate] = slug;
@@ -84,7 +85,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 		}
 
 		return NextResponse.json(
-			{ sectionId, section, files: responseFiles },
+			{ sectionId, section, files: responseFiles, runtime: Date.now() - startedAt },
 			{
 				headers: {
 					"Cache-Control": "public, s-maxage=6000",
