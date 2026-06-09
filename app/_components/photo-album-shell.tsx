@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { AppHeader } from "./app-header";
 import { GalleryFor } from "./gallery";
 import { SectionFolders } from "./nav/section-folders";
 import type { UISection } from "./ui-types";
+import { buildHomeHref } from "./url-paths";
 
 interface PhotoAlbumShellProps {
 	sections: UISection[];
@@ -42,19 +44,45 @@ export function PhotoAlbumShell({
 						{section ? (
 							<GalleryFor section={section} folder={folder} />
 						) : (
-							<div className="flex min-h-[28rem] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-900/40 px-6 text-center">
-								<div className="max-w-md space-y-3">
-									<h2 className="text-2xl font-semibold text-white">Start with a trip</h2>
-									<p className="text-sm leading-6 text-slate-400">
-										Choose a section on the left to load folders and browse the
-										photo timeline for that destination.
-									</p>
-								</div>
-							</div>
+							<SectionPicker sections={sections} />
 						)}
 					</section>
 				</div>
 			</main>
+		</div>
+	);
+}
+
+function SectionPicker({ sections }: { sections: UISection[] }) {
+	return (
+		<div className="space-y-6 p-2">
+			<div>
+				<h2 className="text-2xl font-semibold text-white">Choose a collection</h2>
+				<p className="mt-1 text-sm text-slate-400">
+					Select a travel collection to browse its photo timeline.
+				</p>
+			</div>
+			<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+				{sections.map((s) => (
+					<Link
+						key={s.id}
+						href={buildHomeHref(s.name)}
+						className="group flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-sky-400/30 hover:bg-sky-400/5"
+					>
+						<div className="flex items-center gap-3">
+							<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950/70 text-xs font-bold text-sky-300 group-hover:border-sky-300/30">
+								{String(s.id).padStart(2, "0")}
+							</span>
+							<span className="truncate text-sm font-semibold text-white">
+								{s.name}
+							</span>
+						</div>
+						{s.path ? (
+							<p className="truncate text-xs text-slate-500">{s.path}</p>
+						) : null}
+					</Link>
+				))}
+			</div>
 		</div>
 	);
 }
