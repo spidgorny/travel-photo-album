@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { InfoSidebar } from "./info-sidebar";
@@ -26,7 +27,7 @@ export function AppHeader({
 	const router = useRouter();
 	const [isInfoOpen, setIsInfoOpen] = useState(false);
 	const section = sections[activeSectionId];
-	const selectedSectionValue = activeSectionId >= 0 ? String(activeSectionId) : "";
+	const selectedSectionValue = section?.name ?? "";
 
 	const handleSectionChange = (event: ChangeEvent<HTMLSelectElement>) => {
 		const nextSection = event.target.value;
@@ -51,9 +52,12 @@ export function AppHeader({
 					<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 						<div className="max-w-xl space-y-2">
 							<div className="flex flex-wrap items-center gap-2">
-								<div className="inline-flex items-center rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-sky-200">
+								<Link
+									href="/"
+									className="inline-flex items-center rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-sky-200 transition hover:border-sky-300/40 hover:bg-sky-300/15 hover:text-sky-100"
+								>
 									Travel Photo Album
-								</div>
+								</Link>
 								<button
 									type="button"
 									onClick={() => setIsInfoOpen(true)}
@@ -86,7 +90,7 @@ export function AppHeader({
 								>
 									<option value="">Select a travel collection</option>
 									{sections.map((candidateSection, index) => (
-										<option key={candidateSection.id ?? index} value={index}>
+										<option key={candidateSection.id ?? index} value={candidateSection.name}>
 											{candidateSection.name}
 										</option>
 									))}
