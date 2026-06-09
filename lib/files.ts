@@ -2,7 +2,6 @@
 import path from "path";
 import readdir from "@jsdevtools/readdir-enhanced";
 import fs from "fs";
-import { magicCache } from "./cache.ts";
 import invariant from "tiny-invariant";
 import type { ConfigSection } from "./config.ts";
 import type {
@@ -86,26 +85,13 @@ export async function getFilteredFiles(
 
 
 async function getFiles(imagePath) {
-	// this is recursive and slow
-	// let files = await readdir(imagePath);
-
-	// this returns nothing []
-	// let patterns = path.join(imagePath, "*");
-	// console.log(patterns);
-	// let files = await globby(patterns, {
-	//   expandDirectories: true,
-	// });
-	// return files;
-
-	return magicCache("getFiles", async () => {
-		let files = await readdir.async(imagePath, {stats: true});
-		files = files.map((x) => ({
-			path: x.path,
-			stats: {...x},
-			isDir: x.isDirectory(),
-		}));
-		return files;
-	}, imagePath);
+	let files = await readdir.async(imagePath, { stats: true });
+	files = files.map((x) => ({
+		path: x.path,
+		stats: { ...x },
+		isDir: x.isDirectory(),
+	}));
+	return files;
 }
 
 export async function getFileDates(
@@ -120,30 +106,16 @@ export async function getFilesWithOptionalDates(
 	section: ConfigSection,
 	imagePath: string[] = [],
 ): Promise<FileEntryWithOptionalDate[]> {
-	return magicCache(
-		"getFilesWithOptionalDates",
-		async () => {
-			let files = await getFilteredFiles(section, imagePath);
-
-			files = files.map((x) => ({
-				...x,
-				dirPath: path.join(...imagePath, x.path),
-				fullPath: joinSectionPath(section.path, [...imagePath, x.path]),
-				date: getFileDate(
-					joinSectionPath(section.path, [...imagePath, x.path]),
-					x.stats?.ctime instanceof Date ? x.stats.ctime : null,
-				),
-			}));
-
-			return files;
-		},
-		{
-			sectionPath: section.path,
-			sectionFrom: section.from ?? null,
-			sectionTill: section.till ?? null,
-			imagePath,
-		},
-	);
+	const files = await getFilteredFiles(section, imagePath);
+	return files.map((x) => ({
+		...x,
+		dirPath: path.join(...imagePath, x.path),
+		fullPath: joinSectionPath(section.path, [...imagePath, x.path]),
+		date: getFileDate(
+			joinSectionPath(section.path, [...imagePath, x.path]),
+			x.stats?.ctime instanceof Date ? x.stats.ctime : null,
+		),
+	}));
 }
 
 export function getFileDate(
