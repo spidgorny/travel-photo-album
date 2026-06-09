@@ -72,7 +72,31 @@ export async function GET(request: Request, { params }: RouteContext) {
 		const sectionId = getSectionIndex(config.sections, section);
 		const indexedSection = { ...section, id: sectionId };
 		const searchQuery = normalizeSearchQuery(url.searchParams.get("q"));
-		let files = (await getFilesWithOptionalDates(indexedSection, filePath)) as FileEntryWithOptionalDate[];
+		let files = (await getFilesWithOptionalDates(indexedSection, filePath, { kvOnly: true })) as FileEntryWithOptionalDate[] | null;
+
+		if (!files) {
+			return NextResponse.json<DatesSuccessResponse>({
+				sectionId,
+				dates: {},
+				locationsByDate: {},
+				pagination: {
+					page: 1,
+					totalPages: 0,
+					totalFiles: 0,
+					totalDays: 0,
+					pageFiles: 0,
+					pageDays: 0,
+					perPageFileLimit: galleryPageFileLimit,
+					hasPreviousPage: false,
+					hasNextPage: false,
+				},
+			}, {
+				headers: {
+					"X-Not-Indexed": "true",
+					"Cache-Control": "no-store",
+				},
+			});
+		}
 
 		files = files.filter((file) => !file.isDir);
 		if (searchQuery) {

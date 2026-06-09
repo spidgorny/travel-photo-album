@@ -24,7 +24,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 		const sectionId = getSectionIndex(config.sections, section);
 
 		const folderPath = Array.isArray(filePath) ? filePath : [];
-		const entries = await getFilteredFiles(section, folderPath);
+		const entries = await getFilteredFiles(section, folderPath) ?? [];
 		const files = entries.filter((entry) => !entry.isDir);
 		const variant = `w${thumbnailTargetWidth}-jpeg`;
 

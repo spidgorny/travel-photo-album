@@ -43,7 +43,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 			invariant(dayKey, "date missing");
 		}
 
-		let files = await getFilesWithOptionalDates(section, filePathWithDate);
+		let files = (await getFilesWithOptionalDates(section, filePathWithDate, { kvOnly: true })) ?? [] as FileEntryWithOptionalDate[];
 		files = files.filter((file) =>
 			isUndatedBucket ? !file.date : Boolean(file.date && formatDayKey(file.date) === dayKey),
 		);

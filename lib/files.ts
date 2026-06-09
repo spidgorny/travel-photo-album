@@ -40,7 +40,8 @@ export function hasHiddenPathSegment(filePath: string[] | string): boolean {
 export async function getFilteredFiles(
 	section: ConfigSection,
 	filePath: string[] = [],
-): Promise<FilteredFileEntry[]> {
+	{ kvOnly = false } = {},
+): Promise<FilteredFileEntry[] | null> {
 	invariant(section.path, 'section.path');
 
 	// Try Kvrocks-backed folder listing first (stable across mounts/platforms).
@@ -49,6 +50,9 @@ export async function getFilteredFiles(
 
 	if (kvListing) {
 		files = kvListing;
+	} else if (kvOnly) {
+		// Caller wants Kvrocks-only — don't touch the NAS.
+		return null;
 	} else {
 		const imagePath = joinSectionPath(section.path, filePath);
 		console.log("reading", imagePath);
@@ -105,8 +109,10 @@ export async function getFileDates(
 export async function getFilesWithOptionalDates(
 	section: ConfigSection,
 	imagePath: string[] = [],
-): Promise<FileEntryWithOptionalDate[]> {
-	const files = await getFilteredFiles(section, imagePath);
+	{ kvOnly = false } = {},
+): Promise<FileEntryWithOptionalDate[] | null> {
+	const files = await getFilteredFiles(section, imagePath, { kvOnly });
+	if (!files) return null;
 	return files.map((x) => ({
 		...x,
 		dirPath: path.join(...imagePath, x.path),
@@ -126,7 +132,6 @@ export function getFileDate(
 	const match = fileName.match(/(20\d\d)(\d\d)(\d\d)/);
 	if (match) {
 		let date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-		// console.log(fileName, date.toISOString());
 		return date;
 	}
 
@@ -134,12 +139,7 @@ export function getFileDate(
 		return defaultCtime;
 	}
 
-	try {
-		return fs.statSync(pathName).mtime;
-	} catch (e) {
-		console.error('ERROR', e.message);
-		return null;
-	}
+	return null;
 }
 
 export function formatDayKey(date: Date): string {
