@@ -216,31 +216,27 @@ function mergeQueueTimingStats(
 
 function buildDurationHistogram(
 	durationsMs: number[],
-	targetBucketCount = 9,
+	targetBucketCount = 18,
 ): QueueDurationHistogramBucket[] {
 	if (durationsMs.length === 0) {
 		return [];
 	}
 
 	const sortedDurations = [...durationsMs].sort((left, right) => left - right);
-	const averageDurationMs =
-		sortedDurations.reduce((sum, durationMs) => sum + durationMs, 0) / sortedDurations.length;
+	if (targetBucketCount <= 2) {
+		return buildTailOnlyHistogram(sortedDurations, targetBucketCount);
+	}
+
 	const lowerTypicalDurationMs = getPercentile(sortedDurations, 0.1);
 	const upperTypicalDurationMs = getPercentile(sortedDurations, 0.9);
-	const halfRangeMs = Math.max(
-		averageDurationMs - lowerTypicalDurationMs,
-		upperTypicalDurationMs - averageDurationMs,
-		Math.max(averageDurationMs * 0.35, 250),
+	const typicalRangeMs = Math.max(
+		upperTypicalDurationMs - lowerTypicalDurationMs,
+		Math.max(getPercentile(sortedDurations, 0.5) * 0.35, 250),
 	);
-	const bucketSizeMs = chooseHistogramBucketSize((halfRangeMs * 2) / targetBucketCount);
-	const middleBucketIndex = Math.floor(targetBucketCount / 2);
-	const startMs = Math.max(
-		0,
-		Math.floor(
-			(averageDurationMs - middleBucketIndex * bucketSizeMs - bucketSizeMs / 2) / bucketSizeMs,
-		) * bucketSizeMs,
-	);
-	const endMs = startMs + targetBucketCount * bucketSizeMs;
+	const innerBucketCount = targetBucketCount - 2;
+	const bucketSizeMs = chooseHistogramBucketSize(typicalRangeMs / innerBucketCount);
+	const startMs = Math.max(0, Math.floor(lowerTypicalDurationMs / bucketSizeMs) * bucketSizeMs);
+	const endMs = Math.max(startMs + bucketSizeMs, startMs + innerBucketCount * bucketSizeMs);
 	const counts = Array.from({ length: targetBucketCount }, () => 0);
 	let includesLowerTail = false;
 	let includesUpperTail = false;
@@ -257,8 +253,58 @@ function buildDurationHistogram(
 			continue;
 		}
 		const index = Math.min(
+			targetBucketCount - 2,
+			1 + Math.floor((durationMs - startMs) / bucketSizeMs),
+		);
+		counts[index] += 1;
+	}
+
+	return counts.map((count, index) => {
+		if (index === 0) {
+			return {
+				startMs: 0,
+				endMs: startMs,
+				count,
+				includesLowerTail,
+				includesUpperTail: false,
+			};
+		}
+		if (index === targetBucketCount - 1) {
+			return {
+				startMs: endMs,
+				endMs: endMs + bucketSizeMs,
+				count,
+				includesLowerTail: false,
+				includesUpperTail,
+			};
+		}
+		const innerIndex = index - 1;
+		return {
+			startMs: startMs + innerIndex * bucketSizeMs,
+			endMs: startMs + (innerIndex + 1) * bucketSizeMs,
+			count,
+			includesLowerTail: false,
+			includesUpperTail: false,
+		};
+	});
+}
+
+function buildTailOnlyHistogram(
+	sortedDurations: number[],
+	targetBucketCount: number,
+): QueueDurationHistogramBucket[] {
+	const minDurationMs = sortedDurations[0] ?? 0;
+	const maxDurationMs = sortedDurations[sortedDurations.length - 1] ?? minDurationMs;
+	const bucketSizeMs = chooseHistogramBucketSize(
+		Math.max(maxDurationMs - minDurationMs, 1) / Math.max(targetBucketCount, 1),
+	);
+	const startMs = Math.max(0, Math.floor(minDurationMs / bucketSizeMs) * bucketSizeMs);
+	const counts = Array.from({ length: targetBucketCount }, () => 0);
+
+	for (const durationMs of sortedDurations) {
+		const index = Math.min(
 			targetBucketCount - 1,
-			Math.floor((durationMs - startMs) / bucketSizeMs),
+			Math.max(0, Math.floor((durationMs - startMs) / bucketSizeMs)),
 		);
 		counts[index] += 1;
 	}
@@ -267,8 +313,6 @@ function buildDurationHistogram(
 		startMs: startMs + index * bucketSizeMs,
 		endMs: startMs + (index + 1) * bucketSizeMs,
 		count,
-		includesLowerTail: index === 0 ? includesLowerTail : false,
-		includesUpperTail: index === targetBucketCount - 1 ? includesUpperTail : false,
 	}));
 }
 
