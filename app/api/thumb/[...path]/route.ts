@@ -24,6 +24,7 @@ import {
 } from "../../../../lib/thumb-store";
 import {
 	getSectionById,
+	getSectionIndex,
 	jsonError,
 } from "../../../../lib/api-route";
 interface RouteContext {
@@ -49,7 +50,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 			});
 		}
 
-		const numericSectionId = Number(sectionId);
+		const numericSectionId = getSectionIndex(config.sections, section);
 		const shouldWarmMetadata = mediaKind === "image";
 		const [thumb, storedMeta] = await Promise.all([
 			ensureSectionThumb(

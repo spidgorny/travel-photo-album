@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import config from "../../../../lib/config";
-import { getSectionById, jsonError } from "../../../../lib/api-route";
+import { getSectionById, getSectionIndex, jsonError } from "../../../../lib/api-route";
 import { readStoredMetaForFile } from "../../../../lib/file-meta";
 import { getFilteredFiles } from "../../../../lib/files";
 import {
@@ -16,11 +16,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 	try {
 		const resolvedParams = await params;
 		const { slug = [] } = resolvedParams;
-		const [sectionId, ...filePath] = slug;
-		const section = getSectionById(config.sections, sectionId);
+		const [sectionInput, ...filePath] = slug;
+		const section = getSectionById(config.sections, sectionInput);
 		if (!section) {
-			return NextResponse.json({ error: `section ${sectionId} not found` }, { status: 404 });
+			return NextResponse.json({ error: `section ${sectionInput} not found` }, { status: 404 });
 		}
+		const sectionId = getSectionIndex(config.sections, section);
 
 		const folderPath = Array.isArray(filePath) ? filePath : [];
 		const entries = await getFilteredFiles(section, folderPath);

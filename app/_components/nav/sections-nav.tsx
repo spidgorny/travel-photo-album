@@ -14,7 +14,7 @@ export function SectionsNav({ sections = [], sectionId }: SectionsNavProps) {
 			{sections.map((section, index) => (
 				<li key={section.id ?? index}>
 					<Link
-						href={`/?section=${index}`}
+						href={`/?section=${section.name}`}
 						className={[
 							"group flex items-center justify-between rounded-2xl border px-4 py-3 transition",
 							index === sectionId

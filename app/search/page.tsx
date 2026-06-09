@@ -93,14 +93,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 													) : null}
 												</div>
 												<a
-													href={buildHomeDayHref(result.sectionId, result.folder, result.date)}
+													href={buildHomeDayHref(result.sectionName, result.folder, result.date)}
 													className="inline-flex items-center justify-center rounded-full border border-sky-300/30 bg-sky-300/10 px-4 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-200/40 hover:bg-sky-300/20 hover:text-white"
 												>
 													Open folder and day
 												</a>
 											</div>
 											<SearchResultPreviewGrid
-												sectionId={result.sectionId}
+												sectionName={result.sectionName}
 												previewFiles={result.previewFiles}
 											/>
 										</article>

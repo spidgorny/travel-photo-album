@@ -6,12 +6,12 @@ import type { GalleryPhoto } from "./ui-types";
 import { buildApiPath } from "./url-paths";
 
 interface SearchResultPreviewGridProps {
-	sectionId: number;
+	sectionName: string;
 	previewFiles: string[];
 }
 
 export function SearchResultPreviewGrid({
-	sectionId,
+	sectionName,
 	previewFiles,
 }: SearchResultPreviewGridProps) {
 	const [currentIndex, setCurrentIndex] = useState(0);
@@ -21,15 +21,15 @@ export function SearchResultPreviewGrid({
 		() =>
 			previewFiles.map((previewFile) => {
 				const fileName = previewFile.split("/").at(-1) ?? previewFile;
-				const src = buildApiPath("/api/photo", sectionId, previewFile);
+				const src = buildApiPath("/api/photo", sectionName, previewFile);
 				return {
-					key: `${sectionId}:${previewFile}`,
+					key: `${sectionName}:${previewFile}`,
 					path: previewFile,
 					src,
 					source: {
 						regular: src,
-						fullscreen: buildApiPath("/api/thumb", sectionId, previewFile, "w1600-jpeg"),
-						thumbnail: buildApiPath("/api/thumb", sectionId, previewFile),
+						fullscreen: buildApiPath("/api/thumb", sectionName, previewFile, "w1600-jpeg"),
+						thumbnail: buildApiPath("/api/thumb", sectionName, previewFile),
 					},
 					width: 4,
 					height: 3,
@@ -37,7 +37,7 @@ export function SearchResultPreviewGrid({
 					title: fileName,
 				};
 			}),
-		[previewFiles, sectionId],
+		[previewFiles, sectionName],
 	);
 
 	return (

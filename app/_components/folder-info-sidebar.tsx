@@ -9,20 +9,18 @@ import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 interface FolderInfoSidebarProps {
 	isOpen: boolean;
 	onClose: () => void;
-	sectionId: number;
-	collectionName?: string;
+	sectionName: string;
 	folder?: string;
 }
 
 export function FolderInfoSidebar({
 	isOpen,
 	onClose,
-	sectionId,
-	collectionName,
+	sectionName,
 	folder = "",
 }: FolderInfoSidebarProps) {
 	const apiUrl =
-		sectionId >= 0 ? (folder ? `/api/folder-info/${sectionId}/${folder}` : `/api/folder-info/${sectionId}`) : null;
+		sectionName ? (folder ? `/api/folder-info/${sectionName}/${folder}` : `/api/folder-info/${sectionName}`) : null;
 	const { data, error, isLoading, mutate } = useSWR<FolderInfoResponse>(isOpen ? apiUrl : null, fetcher);
 
 	useEffect(() => {
@@ -83,7 +81,7 @@ export function FolderInfoSidebar({
 					<section className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
 						<p className="text-xs uppercase tracking-[0.22em] text-slate-400">Current view</p>
 						<div className="mt-3 space-y-3 text-sm text-slate-200">
-							<InfoRow label="Collection" value={collectionName || "No collection selected"} />
+							<InfoRow label="Collection" value={sectionName || "No collection selected"} />
 							<InfoRow label="Folder" value={folder || "/"} />
 						</div>
 					</section>

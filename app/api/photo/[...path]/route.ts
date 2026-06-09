@@ -26,8 +26,8 @@ interface RouteContext {
 
 export async function GET(_request: Request, { params }: RouteContext) {
 	const { path: pathSegments = [] } = await params;
-	const [sectionId, ...filePath] = pathSegments;
-	const section = getSectionById(config.sections, sectionId);
+	const [sectionInput, ...filePath] = pathSegments;
+	const section = getSectionById(config.sections, sectionInput);
 	let fullPath: string | undefined;
 
 	try {
@@ -62,7 +62,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 	} catch (error) {
 		return Response.json(
 			jsonError(error, {
-				sectionId,
+				sectionId: sectionInput,
 				section,
 				fullPath,
 			}) as PhotoErrorResponse,

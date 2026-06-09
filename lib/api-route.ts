@@ -38,8 +38,20 @@ export function getSectionById(
 sections: ConfigSection[],
 sectionId: string | number | undefined,
 ): ConfigSection | undefined {
+if (sectionId === undefined || sectionId === null) return undefined;
+if (typeof sectionId === "string") {
+	const byName = sections.find((s) => s.name === sectionId);
+	if (byName) return byName;
+}
 const index = typeof sectionId === "number" ? sectionId : Number(sectionId);
 return Number.isInteger(index) ? sections[index] : undefined;
+}
+
+export function getSectionIndex(
+sections: ConfigSection[],
+section: ConfigSection,
+): number {
+return sections.indexOf(section);
 }
 
 export function toError(error: unknown): Error {

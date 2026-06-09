@@ -16,9 +16,8 @@ export function PhotoAlbumShell({
 	initialSectionQuery,
 	initialFolder = "",
 }: PhotoAlbumShellProps) {
-	const sectionId = Number.parseInt(initialSectionQuery ?? "", 10);
-	const activeSectionId = Number.isInteger(sectionId) ? sectionId : -1;
-	const section = sections[activeSectionId];
+	const section = sections.find((s) => s.name === initialSectionQuery);
+	const activeSectionId = section?.id ?? -1;
 	const folder = initialFolder;
 	const locationLabel = folder ? folder.split("/").join(" / ") : "Choose a folder to browse";
 

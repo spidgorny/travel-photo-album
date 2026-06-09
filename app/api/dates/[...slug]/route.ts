@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import invariant from "tiny-invariant";
 import config from "../../../../lib/config";
 import {
-	getNumericSectionId,
 	getSectionById,
+	getSectionIndex,
 	jsonError,
 } from "../../../../lib/api-route";
 import {
@@ -67,9 +67,9 @@ export async function GET(request: Request, { params }: RouteContext) {
 		const { slug = [] } = await params;
 		const [sectionInput, ...filePath] = slug;
 		const url = new URL(request.url);
-		const sectionId = getNumericSectionId(sectionInput, url.searchParams.get("section"));
-		const section = getSectionById(config.sections, sectionId);
+		const section = getSectionById(config.sections, sectionInput ?? url.searchParams.get("section") ?? undefined);
 		invariant(section, "section");
+		const sectionId = getSectionIndex(config.sections, section);
 		const indexedSection = { ...section, id: sectionId };
 		const searchQuery = normalizeSearchQuery(url.searchParams.get("q"));
 		let files = (await getFilesWithOptionalDates(indexedSection, filePath)) as FileEntryWithOptionalDate[];

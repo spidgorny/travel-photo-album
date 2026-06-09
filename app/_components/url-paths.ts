@@ -12,8 +12,8 @@ export function buildApiPath(basePath: string, ...values: Array<string | number 
 	return encodedSegments.length > 0 ? `${basePath}/${encodedSegments.join("/")}` : basePath;
 }
 
-export function buildHomeHref(sectionId: number, folderPath?: string) {
-	const query = new URLSearchParams({ section: String(sectionId) });
+export function buildHomeHref(sectionName: string, folderPath?: string) {
+	const query = new URLSearchParams({ section: sectionName });
 	if (folderPath) {
 		query.set("folder", folderPath);
 	}
@@ -24,8 +24,8 @@ export function buildDayAnchorId(date: string) {
 	return `day-${date}`;
 }
 
-export function buildHomeDayHref(sectionId: number, folderPath: string | undefined, date: string) {
-	return `${buildHomeHref(sectionId, folderPath)}#${buildDayAnchorId(date)}`;
+export function buildHomeDayHref(sectionName: string, folderPath: string | undefined, date: string) {
+	return `${buildHomeHref(sectionName, folderPath)}#${buildDayAnchorId(date)}`;
 }
 
 export function createGoogleMapsHref(location: string) {

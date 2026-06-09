@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/http";
 import { FolderInfoSidebar } from "./folder-info-sidebar";
@@ -22,8 +22,8 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 	const requestedPage = normalizePageNumber(searchParams.get("page"));
 	const apiUrl =
 		requestedPage > 1
-			? `/api/dates/${section.id}/${folder}?page=${requestedPage}`
-			: `/api/dates/${section.id}/${folder}`;
+			? `/api/dates/${section.name}/${folder}?page=${requestedPage}`
+			: `/api/dates/${section.name}/${folder}`;
 	const { data, error, mutate } = useSWR<DatesResponse>(apiUrl, fetcher);
 	const [isFolderInfoOpen, setIsFolderInfoOpen] = useState(false);
 
@@ -82,8 +82,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 			<FolderInfoSidebar
 				isOpen={isFolderInfoOpen}
 				onClose={() => setIsFolderInfoOpen(false)}
-				sectionId={section.id}
-				collectionName={section.name}
+				sectionName={section.name}
 				folder={folder}
 			/>
 			<div className="space-y-6">
@@ -131,7 +130,7 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 						}
 					/>
 				) : null}
-				{dates.map(({ date, count, locations }) => {
+				{dates.map(({ date, count, locations }, index) => {
 					const anchorId = buildDayAnchorId(date);
 					return (
 						<section
@@ -167,13 +166,14 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 									</div>
 								) : null}
 							</div>
-							{!isSSR && (
-								<GalleryOneDay
-									sectionId={section.id}
+							{!isSSR ? (
+								<LazyDayGallery
+									sectionName={section.name}
 									folder={folder}
 									date={date}
+									eager={index < EAGER_DAY_COUNT}
 								/>
-							)}
+							) : null}
 						</section>
 					);
 				})}
@@ -191,13 +191,14 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 								</p>
 							</div>
 						</div>
-						{!isSSR && (
-							<GalleryOneDay
-								sectionId={section.id}
+						{!isSSR ? (
+							<LazyDayGallery
+								sectionName={section.name}
 								folder={folder}
 								date={UNDATED_BUCKET}
+								eager={dates.length < EAGER_DAY_COUNT}
 							/>
-						)}
+						) : null}
 					</section>
 				) : null}
 				{pagination.totalPages > 1 ? (
@@ -254,6 +255,66 @@ export function GalleryFor({ section, folder = "" }: GalleryForProps) {
 const MAX_LOCATION_LABELS = 3;
 const VISIBLE_PAGINATION_RADIUS = 1;
 const UNDATED_BUCKET = "undated";
+const EAGER_DAY_COUNT = 2;
+const DAY_GALLERY_PRELOAD_MARGIN = "1200px 0px";
+
+interface LazyDayGalleryProps {
+	sectionName: string;
+	folder: string;
+	date: string;
+	eager?: boolean;
+}
+
+function LazyDayGallery({
+	sectionName,
+	folder,
+	date,
+	eager = false,
+}: LazyDayGalleryProps) {
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const [shouldLoad, setShouldLoad] = useState(eager);
+
+	useEffect(() => {
+		if (shouldLoad) {
+			return;
+		}
+
+		const element = containerRef.current;
+		if (!element || typeof IntersectionObserver === "undefined") {
+			setShouldLoad(true);
+			return;
+		}
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (!entries.some((entry) => entry.isIntersecting)) {
+					return;
+				}
+
+				setShouldLoad(true);
+				observer.disconnect();
+			},
+			{
+				rootMargin: DAY_GALLERY_PRELOAD_MARGIN,
+				threshold: 0.01,
+			},
+		);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [shouldLoad]);
+
+	return (
+		<div ref={containerRef}>
+			{shouldLoad ? (
+				<GalleryOneDay sectionName={sectionName} folder={folder} date={date} />
+			) : (
+				<div className="flex min-h-[12rem] items-center justify-center rounded-3xl border border-dashed border-white/10 bg-slate-950/25 px-4 text-sm text-slate-500">
+					Loading this day when it scrolls into view.
+				</div>
+			)}
+		</div>
+	);
+}
 
 interface GalleryPaginationProps {
 	currentPage: number;

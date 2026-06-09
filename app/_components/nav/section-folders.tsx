@@ -74,7 +74,7 @@ interface SubFoldersProps {
 }
 
 export function SubFolders({ section, activeFolder, thePath }: SubFoldersProps) {
-	const requestUrl = buildApiPath("/api/files", section.id, thePath);
+	const requestUrl = buildApiPath("/api/files", section.name, thePath);
 	const { data, error, mutate } = useSWR<FilesResponse>(requestUrl, fetcher);
 	const files = Array.isArray(data?.files) ? data.files : [];
 	const dirs = files
@@ -185,7 +185,7 @@ function FolderNode({
 					</span>
 				</button>
 				<Link
-					href={buildHomeHref(section.id, folderPath)}
+					href={buildHomeHref(section.name, folderPath)}
 					className="min-w-0 flex-1 rounded-xl px-2 py-1"
 				>
 					<div className="truncate text-sm font-medium text-white">

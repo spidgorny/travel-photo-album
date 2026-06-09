@@ -12,7 +12,7 @@ import { buildApiPath } from "./url-paths";
 import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 
 interface GalleryOneDayProps {
-	sectionId: number;
+	sectionName: string;
 	folder: string;
 	date: string;
 }
@@ -51,9 +51,11 @@ type PhotoGalleryComponentProps = {
 const PhotoGallery = Gallery as unknown as ComponentType<PhotoGalleryComponentProps>;
 const MAX_PHASH_DISTANCE = 28;
 
-export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
-	const apiUrl = buildApiPath("/api/filesByDate", sectionId, folder, date);
-	const { data, error, mutate } = useSWR<FilesResponse>(apiUrl, fetcher);
+export function GalleryOneDay({ sectionName, folder, date }: GalleryOneDayProps) {
+	const apiUrl = buildApiPath("/api/filesByDate", sectionName, folder, date);
+	const { data, error, mutate } = useSWR<FilesResponse>(apiUrl, fetcher, {
+		revalidateOnFocus: false,
+	});
 
 	const [currentImage, setCurrentImage] = useState(0);
 	const [viewerIsOpen, setViewerIsOpen] = useState(false);
@@ -70,9 +72,9 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 
 		return files.map((file) => {
 			const filePath = typeof file.path === "string" ? file.path : "";
-			const src = buildApiPath("/api/photo", sectionId, folder, filePath);
-			const thumbSrc = buildApiPath("/api/thumb", sectionId, folder, filePath);
-			const photoKey = `${sectionId}:${folder}:${filePath}`;
+			const src = buildApiPath("/api/photo", sectionName, folder, filePath);
+			const thumbSrc = buildApiPath("/api/thumb", sectionName, folder, filePath);
+			const photoKey = `${sectionName}:${folder}:${filePath}`;
 			const fileName = filePath.split("/").at(-1) ?? filePath;
 
 			return {
@@ -99,7 +101,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 						: undefined,
 			};
 		});
-	}, [data, folder, sectionId]);
+	}, [data, folder, sectionName]);
 
 	const [dimensions, setDimensions] = useState<GalleryPhoto[]>(photos);
 	const groupedPhotos = useMemo(() => groupSimilarPhotosForDay(dimensions), [dimensions]);
@@ -163,7 +165,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 	const currentPhoto = lightboxPhotos[currentImage] ?? null;
 	const currentMetaUrl =
 		viewerIsOpen && currentPhoto
-			? buildApiPath("/api/meta", sectionId, folder, currentPhoto.path)
+			? buildApiPath("/api/meta", sectionName, folder, currentPhoto.path)
 			: null;
 	const {
 		data: currentMeta,
@@ -279,7 +281,7 @@ export function GalleryOneDay({ sectionId, folder, date }: GalleryOneDayProps) {
 				footer={
 					currentPhoto ? (
 						<DescriptionEditor
-							sectionId={sectionId}
+							sectionName={sectionName}
 							folder={folder}
 							photo={currentPhoto}
 							onSaved={(description) => {
@@ -383,13 +385,13 @@ function bitCount(value: number) {
 }
 
 interface DescriptionEditorProps {
-	sectionId: number;
+	sectionName: string;
 	folder: string;
 	photo: GalleryPhoto;
 	onSaved: (description?: string) => void;
 }
 
-function DescriptionEditor({ sectionId, folder, photo, onSaved }: DescriptionEditorProps) {
+function DescriptionEditor({ sectionName, folder, photo, onSaved }: DescriptionEditorProps) {
 	const [draft, setDraft] = useState(photo.description ?? "");
 	const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
@@ -401,7 +403,7 @@ function DescriptionEditor({ sectionId, folder, photo, onSaved }: DescriptionEdi
 	const saveDescription = useCallback(async () => {
 		setSaveState("saving");
 		try {
-			const response = await fetch(buildApiPath("/api/meta", sectionId, folder, photo.path), {
+			const response = await fetch(buildApiPath("/api/meta", sectionName, folder, photo.path), {
 				method: "PATCH",
 				headers: {
 					"Content-Type": "application/json",
@@ -420,7 +422,7 @@ function DescriptionEditor({ sectionId, folder, photo, onSaved }: DescriptionEdi
 		} catch {
 			setSaveState("error");
 		}
-	}, [draft, folder, onSaved, photo.path, sectionId]);
+	}, [draft, folder, onSaved, photo.path, sectionName]);
 
 	return (
 		<div className="space-y-2">

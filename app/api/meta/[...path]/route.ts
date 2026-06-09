@@ -5,6 +5,7 @@ import invariant from "tiny-invariant";
 import config, { type ConfigSection } from "../../../../lib/config";
 import {
 	getSectionById,
+	getSectionIndex,
 	jsonError,
 	toError,
 } from "../../../../lib/api-route";
@@ -78,12 +79,12 @@ interface RouteContext {
 
 export async function GET(_request: Request, { params }: RouteContext) {
 	const { path: pathSegments = [] } = await params;
-	const [sectionId, ...filePath] = pathSegments;
+	const [sectionInput, ...filePath] = pathSegments;
 
 	try {
-		const section = getSectionById(config.sections, sectionId);
+		const section = getSectionById(config.sections, sectionInput);
 		invariant(section, "section");
-		const numericSectionId = Number(sectionId);
+		const numericSectionId = getSectionIndex(config.sections, section);
 		const metaSearchKeys = getStoredMetaDirectoryKeys(section, filePath);
 		const storedMeta = await readStoredMetaForFile(section, filePath);
 
@@ -120,7 +121,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 		return NextResponse.json(
 			jsonError(err, {
-				sectionId,
+				sectionId: sectionInput,
 				filePath: filePath.join("/"),
 			}) as MetaErrorResponse,
 			{ status: 500 },
@@ -131,8 +132,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
 export async function PATCH(request: Request, { params }: RouteContext) {
 	try {
 		const { path: pathSegments = [] } = await params;
-		const [sectionId, ...filePath] = pathSegments;
-		const section = getSectionById(config.sections, sectionId);
+		const [sectionInput, ...filePath] = pathSegments;
+		const section = getSectionById(config.sections, sectionInput);
 		invariant(section, "section");
 
 		const body = (await request.json()) as { description?: unknown };

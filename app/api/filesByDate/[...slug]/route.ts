@@ -2,9 +2,16 @@ import { DateTime } from "luxon";
 import { NextResponse } from "next/server";
 import invariant from "tiny-invariant";
 import config from "../../../../lib/config";
+import { getSectionById, getSectionIndex } from "../../../../lib/api-route";
 import { isValidDate } from "../../../../lib/date";
-import { normalizeStoredPhash, readStoredMetaForFile } from "../../../../lib/file-meta";
+import {
+	getStoredMetaDirectoryKey,
+	normalizeStoredDescription,
+	normalizeStoredPhash,
+	readStoredMetaDirectory,
+} from "../../../../lib/file-meta";
 import { formatDayKey, getFilesWithOptionalDates, parseDayKey } from "../../../../lib/files";
+import type { StoredDirectoryMetaEntry } from "../../../../lib/files-types";
 import { getImageDimensions } from "../../../../lib/thumb-store";
 import type { DatedFileEntry, FileEntryWithOptionalDate } from "../../../../lib/files-types";
 
@@ -22,9 +29,9 @@ export async function GET(request: Request, { params }: RouteContext) {
 		const [sectionInput, ...filePathWithDate] = slug;
 		const url = new URL(request.url);
 		const dateInput = filePathWithDate.pop();
-		const sectionId = Number(sectionInput);
-		const section = config.sections?.[sectionId];
+		const section = getSectionById(config.sections, sectionInput);
 		invariant(section, "section");
+		const sectionId = getSectionIndex(config.sections, section);
 		invariant(dateInput, "date missing");
 
 		const searchQuery = normalizeSearchQuery(url.searchParams.get("q"));
@@ -41,21 +48,27 @@ export async function GET(request: Request, { params }: RouteContext) {
 			isUndatedBucket ? !file.date : Boolean(file.date && formatDayKey(file.date) === dayKey),
 		);
 		files = files.filter((file) => !file.isDir);
+		const metaCache = new Map<string, Promise<Record<string, StoredDirectoryMetaEntry>>>();
 		let responseFiles = await Promise.all(
 			files.map(async (file) => {
 				const filePath = String(file.dirPath ?? file.path)
 					.split("/")
 					.filter(Boolean);
+				const directoryPath = filePath.slice(0, -1);
+				const metaCacheKey = getStoredMetaDirectoryKey(section, directoryPath);
+				const directoryMetaPromise =
+					metaCache.get(metaCacheKey) ?? readStoredMetaDirectory(section, directoryPath);
+				metaCache.set(metaCacheKey, directoryMetaPromise);
 				const [dimensions, storedMeta] = await Promise.all([
 					getImageDimensions(sectionId, section, filePath),
-					readStoredMetaForFile(section, filePath),
+					directoryMetaPromise.then((directoryMeta) => directoryMeta[pathBaseName(filePath)] ?? null),
 				]);
 				return {
 					...file,
 					width: dimensions.width,
 					height: dimensions.height,
 					dominantColor: dimensions.dominantColor,
-					description: normalizeDescription(storedMeta?.description),
+					description: normalizeStoredDescription(storedMeta?.description),
 					phash: normalizeStoredPhash(storedMeta?.phash),
 					original: {
 						width: dimensions.width,
@@ -66,7 +79,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 		);
 		if (searchQuery) {
 			responseFiles = responseFiles.filter((file) =>
-				normalizeDescription(file.description)?.toLocaleLowerCase().includes(searchQuery),
+				normalizeStoredDescription(file.description)?.toLocaleLowerCase().includes(searchQuery),
 			);
 		}
 
@@ -100,10 +113,6 @@ function normalizeSearchQuery(value: string | null) {
 	return normalized.length ? normalized : null;
 }
 
-function normalizeDescription(value: unknown) {
-	if (typeof value !== "string") {
-		return undefined;
-	}
-	const normalized = value.trim();
-	return normalized.length ? normalized : undefined;
+function pathBaseName(filePath: string[]) {
+	return filePath[filePath.length - 1] ?? "";
 }
