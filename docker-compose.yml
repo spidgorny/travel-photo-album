@@ -1,4 +1,69 @@
 services:
+  nextjs:
+    build:
+      context: .
+      dockerfile: docker/nextjs/Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      typesense:
+        condition: service_healthy
+      kvrocks:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      REDIS_URL: redis://kvrocks:6666
+      THUMB_KV_URL: redis://kvrocks:6666
+      BULLMQ_REDIS_URL: redis://redis:6379
+      THUMB_QUEUE_URL: redis://redis:6379
+      THUMB_QUEUE_NAME: thumb-jobs
+      THUMB_QUEUE_PREFIX: travel-photo-album
+      THUMB_TARGET_WIDTH: "256"
+      REDIS_FOLDER_CACHE_TTL_SECONDS: "0"
+      TYPESENSE_PROTOCOL: http
+      TYPESENSE_HOST: typesense
+      TYPESENSE_PORT: "8108"
+      TYPESENSE_API_KEY: change-me-typesense-key
+      TYPESENSE_COLLECTION: travel-photo-album-media
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - type: bind
+        source: ${MEDIA_ROOT_HOST_PATH:-/Volumes/photo}
+        target: ${MEDIA_ROOT_CONTAINER_PATH:-/media/nas/photo}
+        read_only: true
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./app
+          target: /app/app
+        - action: sync+restart
+          path: ./lib
+          target: /app/lib
+        - action: sync+restart
+          path: ./public
+          target: /app/public
+        - action: sync+restart
+          path: ./styles
+          target: /app/styles
+        - action: sync+restart
+          path: ./types
+          target: /app/types
+        - action: sync+restart
+          path: ./next.config.ts
+          target: /app/next.config.ts
+        - action: sync+restart
+          path: ./.env
+          target: /app/.env
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./yarn.lock
+
   typesense:
     image: typesense/typesense:29.0
     ports:
@@ -11,6 +76,17 @@ services:
     volumes:
       - typesense_data:/data
     restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc 'exec 3<>/dev/tcp/127.0.0.1/8108 &&
+          printf "GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n" >&3 &&
+          grep -q "\"ok\":true" <&3'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   kvrocks:
     image: apache/kvrocks:latest
@@ -24,6 +100,17 @@ services:
       watch:
         - action: restart
           path: ./docker/kvrocks/kvrocks.conf
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - -p
+        - "6666"
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
@@ -31,6 +118,15 @@ services:
       - "6379:6379"
     volumes:
       - ./redis:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 
   media-worker:
     build:
@@ -40,9 +136,12 @@ services:
       - .env
     command: npm run worker:media
     depends_on:
-      - typesense
-      - kvrocks
-      - redis
+      typesense:
+        condition: service_healthy
+      kvrocks:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       REDIS_URL: ${MEDIA_WORKER_REDIS_URL:-redis://kvrocks:6666}
       THUMB_KV_URL: ${MEDIA_WORKER_THUMB_KV_URL:-redis://kvrocks:6666}
@@ -97,9 +196,12 @@ services:
     env_file:
       - .env
     depends_on:
-      - typesense
-      - kvrocks
-      - redis
+      typesense:
+        condition: service_healthy
+      kvrocks:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       REDIS_URL: ${DESCRIPTION_WORKER_REDIS_URL:-redis://kvrocks:6666}
       THUMB_KV_URL: ${DESCRIPTION_WORKER_THUMB_KV_URL:-redis://kvrocks:6666}
@@ -161,8 +263,10 @@ services:
       - .env
     command: ["sh", "/app/docker/search-indexer/entrypoint.sh"]
     depends_on:
-      - typesense
-      - kvrocks
+      typesense:
+        condition: service_healthy
+      kvrocks:
+        condition: service_healthy
     environment:
       REDIS_URL: ${SEARCH_INDEXER_REDIS_URL:-redis://kvrocks:6666}
       THUMB_KV_URL: ${SEARCH_INDEXER_THUMB_KV_URL:-redis://kvrocks:6666}
