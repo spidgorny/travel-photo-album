@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import type { ConfigSection } from "./config.ts";
 import { getThumbKvClient, thumbKvPrefix } from "./thumb-store.ts";
 
@@ -8,19 +7,12 @@ interface StoredFolderEntry {
 	ctime: string | null; // ISO-8601 or null
 }
 
-const folderListingKind = "folder-listing:v1";
-
 export function buildFolderListingKey(
 	sectionName: string,
 	folderRelPath: string,
 ): string {
-	const hash = crypto
-		.createHash("sha1")
-		.update(
-			JSON.stringify({ sectionName, folderRelPath, kind: folderListingKind }),
-		)
-		.digest("hex");
-	return `${thumbKvPrefix}:folder:${hash}`;
+	const pathSuffix = folderRelPath ? `:${folderRelPath}` : "";
+	return `${thumbKvPrefix}:folder-listing:v1:${sectionName}${pathSuffix}`;
 }
 
 export async function storeFolderListing(
