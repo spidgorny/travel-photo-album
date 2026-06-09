@@ -421,6 +421,7 @@ export async function getImageDimensions(
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
 	sourceBuffer = undefined,
+	{ kvOnly = false } = {},
 ) {
 	if (isVideoPath(filePath)) {
 		return {
@@ -433,6 +434,16 @@ export async function getImageDimensions(
 	const cached = await getStoredDimensions(section.name, filePath, variant);
 	if (cached) {
 		return cached;
+	}
+	// When kvOnly, don't read the NAS — return a placeholder so the gallery
+	// can render with a default aspect ratio while warmup runs in the background.
+	if (kvOnly) {
+		return {
+			width: 3,
+			height: 2,
+			mimeType: mime.lookup(filePath.join("/")) || null,
+			dominantColor: defaultDominantColor,
+		};
 	}
 	const discovered =
 		getDimensionsFromJson(section, filePath) ??

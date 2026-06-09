@@ -60,7 +60,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 					metaCache.get(metaCacheKey) ?? readStoredMetaDirectory(section, directoryPath);
 				metaCache.set(metaCacheKey, directoryMetaPromise);
 				const [dimensions, storedMeta] = await Promise.all([
-					getImageDimensions(section, filePath),
+					getImageDimensions(section, filePath, undefined, undefined, { kvOnly: true }),
 					directoryMetaPromise.then((directoryMeta) => directoryMeta[pathBaseName(filePath)] ?? null),
 				]);
 				return {
