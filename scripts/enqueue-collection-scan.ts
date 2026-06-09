@@ -16,6 +16,7 @@ import {
 } from "../lib/description-jobs.ts";
 import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
 import { storeFolderListing } from "../lib/folder-store.ts";
+import { getSectionById, getSectionIndex } from "../lib/api-route.ts";
 import {
 hasExifOrientationTransform,
 normalizeStoredDescription,
@@ -41,15 +42,15 @@ async function main() {
 const startedAt = Date.now();
 const { collectionInput, force, forceRotated } = parseArgs(process.argv.slice(2));
 if (!collectionInput) {
-console.log("Usage: npm run queue:scan -- <collection-id-or-name> [--force] [--force-rotated]");
+console.log("Usage: npm run queue:scan -- <collection-name> [--force] [--force-rotated]");
 return;
 }
 
-const sectionId = resolveCollectionId(collectionInput);
-const section = config.sections?.[sectionId];
-invariant(section, "section not found");
+const section = getSectionById(config.sections, collectionInput);
+invariant(section, `section not found: ${collectionInput}`);
+const sectionId = getSectionIndex(config.sections, section);
 invariant(section.path, "section.path");
-console.log(`Resolved collection ${sectionId}: ${section.name}`);
+console.log(`Resolved collection: ${section.name}`);
 console.log(`Root path: ${section.path}`);
 const queue = createMediaQueue();
 let descriptionQueue = null;
@@ -156,21 +157,6 @@ console.log(
 console.log(
 `Queued ${enqueued} warmup jobs (${skipped} skipped) in ${formatDuration(Date.now() - startedAt)}`,
 );
-}
-
-function resolveCollectionId(collectionInput) {
-if (/^\d+$/.test(collectionInput)) {
-const sectionId = Number(collectionInput);
-invariant(Number.isInteger(sectionId), "collection id must be an integer");
-invariant(config.sections?.[sectionId], "section not found");
-return sectionId;
-}
-const normalizedInput = collectionInput.trim().toLowerCase();
-const sectionId = config.sections.findIndex(
-(section) => section?.name?.trim().toLowerCase() === normalizedInput,
-);
-invariant(sectionId >= 0, `section not found: ${collectionInput}`);
-return sectionId;
 }
 
 function parseArgs(args) {

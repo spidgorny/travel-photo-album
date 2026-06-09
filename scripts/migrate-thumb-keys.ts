@@ -10,7 +10,7 @@
  *   node scripts/migrate-thumb-keys.ts [--section <name-or-index>] [--dry-run] [--delete-old]
  *
  * Options:
- *   --section   Migrate only this section (name or index). Default: all sections.
+ *   --section   Migrate only this section (name). Default: all sections.
  *   --dry-run   Print what would be migrated without writing anything.
  *   --delete-old  Delete old keys after copying (default: keep old keys).
  */
@@ -23,6 +23,7 @@ import mime from "mime-types";
 import process from "process";
 import invariant from "tiny-invariant";
 import config, { resolveSection } from "../lib/config.ts";
+import { getSectionById, getSectionIndex } from "../lib/api-route.ts";
 import {
 	getThumbKvClient,
 	thumbKvPrefix,
@@ -77,18 +78,13 @@ function buildKeys(hash: string) {
 	};
 }
 
-function resolveSectionInput(input: string | undefined): number[] {
+function resolveSectionInput(input: string | undefined) {
 	if (!input) {
-		return config.sections.map((_, i) => i);
+		return config.sections;
 	}
-	const asNumber = Number(input);
-	if (Number.isInteger(asNumber)) {
-		invariant(config.sections[asNumber], `section index ${asNumber} not found`);
-		return [asNumber];
-	}
-	const byName = config.sections.findIndex((s) => s.name === input);
-	invariant(byName >= 0, `section "${input}" not found`);
-	return [byName];
+	const section = getSectionById(config.sections, input);
+	invariant(section, `section "${input}" not found`);
+	return [section];
 }
 
 async function walkFiles(sectionPath: string, relPath: string[] = []): Promise<string[][]> {
@@ -124,27 +120,26 @@ async function main() {
 		process.exit(1);
 	}
 
-	const sectionIndices = resolveSectionInput(sectionArg);
+	const sections = resolveSectionInput(sectionArg);
 	let totalCopied = 0;
 	let totalSkipped = 0;
 	let totalMissing = 0;
 	let totalDeleted = 0;
 
-	for (const sectionIndex of sectionIndices) {
-		const rawSection = config.sections[sectionIndex];
-		const section = resolveSection(rawSection);
+	for (const section of sections) {
+		const sectionIndex = getSectionIndex(config.sections, section);
 		if (!section.path) {
-			console.log(`[${sectionIndex}] ${rawSection.name}: no resolved path, skipping`);
+			console.log(`[${section.name}]: no resolved path, skipping`);
 			continue;
 		}
 		if (section.thumbPath) {
 			console.log(
-				`[${sectionIndex}] ${rawSection.name}: uses disk thumbPath, Kvrocks keys not applicable, skipping`,
+				`[${section.name}]: uses disk thumbPath, Kvrocks keys not applicable, skipping`,
 			);
 			continue;
 		}
 
-		console.log(`\n[${sectionIndex}] ${rawSection.name} → ${section.path}`);
+		console.log(`\n[${section.name}] → ${section.path}`);
 
 		const files = await walkFiles(section.path);
 		console.log(`  Found ${files.length} media files`);
@@ -157,7 +152,7 @@ async function main() {
 			const variants = getVariantsForFile(filePath);
 			for (const variant of variants) {
 				const oldHash = oldThumbHash(sectionIndex, filePath, variant);
-				const newHash = newThumbHash(rawSection.name, filePath, variant);
+				const newHash = newThumbHash(section.name, filePath, variant);
 				const { blobKey: oldBlobKey, metaKey: oldMetaKey } = buildKeys(oldHash);
 				const { blobKey: newBlobKey, metaKey: newMetaKey } = buildKeys(newHash);
 

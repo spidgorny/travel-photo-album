@@ -17,6 +17,7 @@ import {
 } from "../lib/description-jobs.ts";
 import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
 import { storeFolderListing } from "../lib/folder-store.ts";
+import { getSectionById, getSectionIndex } from "../lib/api-route.ts";
 import {
 	serializeSectionForWorker,
 	thumbJobActions,
@@ -46,14 +47,14 @@ async function main() {
 	const { collectionInput, force, forceRotated } = parseArgs(process.argv.slice(2));
 	if (!collectionInput) {
 		console.log(
-			"Usage: npm run warmup:thumbs -- <collection-id-or-name> [--force] [--force-rotated]",
+			"Usage: npm run warmup:thumbs -- <collection-name> [--force] [--force-rotated]",
 		);
 		return;
 	}
-	const sectionId = resolveCollectionId(collectionInput);
-	const section = config.sections?.[sectionId];
-	invariant(section, "section not found");
-	console.log(`Resolved collection ${sectionId}: ${section.name}`);
+	const section = getSectionById(config.sections, collectionInput);
+	invariant(section, `section not found: ${collectionInput}`);
+	const sectionId = getSectionIndex(config.sections, section);
+	console.log(`Resolved collection: ${section.name}`);
 	console.log(`Root path: ${section.path}`);
 	if (section.thumbPath) {
 		console.log(`Thumbnail path: ${section.thumbPath}`);
@@ -145,29 +146,13 @@ async function main() {
 		`Scan complete: ${scanStats.directories} director${scanStats.directories === 1 ? "y" : "ies"}, ${scanStats.files} candidate files`,
 	);
 
-	const summary = `Warmup complete for collection ${sectionId}: ${section.name} (${enqueued} enqueued, ${skipped} skipped, ${failed} failed) in ${formatDuration(Date.now() - startedAt)}`;
+	const summary = `Warmup complete for collection: ${section.name} (${enqueued} enqueued, ${skipped} skipped, ${failed} failed) in ${formatDuration(Date.now() - startedAt)}`;
 	if (failed > 0) {
 		console.error(`${ANSI_RED}${summary}${ANSI_RESET}`);
 		process.exitCode = 1;
 	} else {
 		console.log(summary);
 	}
-}
-
-function resolveCollectionId(collectionInput: string) {
-	if (/^\d+$/.test(collectionInput)) {
-		const sectionId = Number(collectionInput);
-		invariant(Number.isInteger(sectionId), "collection id must be an integer");
-		invariant(config.sections?.[sectionId], "section not found");
-		return sectionId;
-	}
-
-	const normalizedInput = collectionInput.trim().toLowerCase();
-	const sectionId = config.sections.findIndex(
-		(section) => section?.name?.trim().toLowerCase() === normalizedInput,
-	);
-	invariant(sectionId >= 0, `section not found: ${collectionInput}`);
-	return sectionId;
 }
 
 function parseArgs(args: string[]) {
