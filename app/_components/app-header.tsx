@@ -96,51 +96,53 @@ export function AppHeader({
 									))}
 								</select>
 							</label>
-							<div className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:flex-1">
-								<div className="text-xs uppercase tracking-[0.2em] text-slate-400">
-									{contextLabel}
-								</div>
-								<div className="mt-2 truncate text-sm font-medium text-slate-200">
-									{contextValue}
 								</div>
 							</div>
-						</div>
-					</div>
-					<form
-						action="/search"
-						className="rounded-[1.5rem] border border-white/10 bg-slate-950/35 p-4"
-					>
-						<div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-							<label className="min-w-0 flex-1">
-								<div className="text-xs uppercase tracking-[0.2em] text-slate-400">
-									Global search
+							<div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+								<div className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 lg:w-1/2">
+									<div className="text-xs uppercase tracking-[0.2em] text-slate-400">
+										{contextLabel}
+									</div>
+									<div className="mt-2 truncate text-sm font-medium text-slate-200">
+										{contextValue}
+									</div>
 								</div>
-								<input
-									type="search"
-									name="q"
-									defaultValue={initialSearchQuery}
-									placeholder="Search image descriptions or geocoded cities"
-									className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/50"
-								/>
-							</label>
-							<div className="flex items-center gap-2">
-								<button
-									type="submit"
-									className="rounded-full border border-sky-300/30 bg-sky-300/10 px-4 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-200/40 hover:bg-sky-300/20 hover:text-white"
-								>
-									Search
-								</button>
-								{initialSearchQuery ? (
-									<a
-										href="/search"
-										className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
-									>
-										Clear
-									</a>
-								) : null}
+							<form
+								action="/search"
+								className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3 lg:w-1/2"
+							>
+								<div className="flex items-end gap-2">
+									<label className="min-w-0 flex-1">
+										<div className="text-xs uppercase tracking-[0.2em] text-slate-400">
+											Global search
+										</div>
+										<input
+											type="search"
+											name="q"
+											defaultValue={initialSearchQuery}
+											placeholder="Search descriptions or cities"
+											className="mt-2 w-full rounded-xl border border-white/10 bg-slate-900/90 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/50"
+										/>
+									</label>
+									<div className="flex shrink-0 items-center gap-2">
+										<button
+											type="submit"
+											className="rounded-full border border-sky-300/30 bg-sky-300/10 px-4 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-200/40 hover:bg-sky-300/20 hover:text-white"
+										>
+											Search
+										</button>
+										{initialSearchQuery ? (
+											<a
+												href="/search"
+												className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+											>
+												Clear
+											</a>
+										) : null}
+									</div>
+								</div>
+							</form>
 							</div>
-						</div>
-					</form>
 				</div>
 			</header>
 		</>
