@@ -67,7 +67,7 @@ async function main() {
 }
 
 interface BenchmarkCandidate {
-	sectionId: number;
+	sectionName: string;
 	filePath: string[];
 	fileName: string;
 	displayPath: string;
@@ -75,14 +75,14 @@ interface BenchmarkCandidate {
 
 async function collectBenchmarkCandidates() {
 	const candidates: BenchmarkCandidate[] = [];
-	for (const [sectionId, section] of config.sections.entries()) {
+	for (const [, section] of config.sections.entries()) {
 		const filePaths = await listStoredMetaFilePaths(section);
 		for (const filePath of filePaths) {
 			if (!isImagePath(filePath)) {
 				continue;
 			}
 			candidates.push({
-				sectionId,
+				sectionName: section.name,
 				filePath,
 				fileName: path.basename(filePath.join("/")),
 				displayPath: `${section.name}/${filePath.join("/")}`,
@@ -99,7 +99,7 @@ async function loadFrame(
 ) {
 	for (let attempt = 0; attempt < 25; attempt += 1) {
 		const candidate = candidates[Math.floor(Math.random() * candidates.length)];
-		const key = buildBlobKey(candidate.sectionId, candidate.filePath);
+		const key = buildBlobKey(candidate.sectionName, candidate.filePath);
 		const frameStartedAt = Date.now();
 
 		const fetchStartedAt = Date.now();
@@ -226,10 +226,10 @@ function getDefaultWidth() {
 	return Math.max(32, Math.min(terminalWidth - 4, 100));
 }
 
-function buildBlobKey(sectionId: number, filePath: string[], variant = defaultVariant) {
+function buildBlobKey(sectionName: string, filePath: string[], variant = defaultVariant) {
 	const hash = crypto
 		.createHash("sha1")
-		.update(JSON.stringify({ sectionId, filePath: filePath.join("/"), variant }))
+		.update(JSON.stringify({ sectionName, filePath: filePath.join("/"), variant }))
 		.digest("hex");
 	return `${thumbKvPrefix}:blob:${hash}`;
 }

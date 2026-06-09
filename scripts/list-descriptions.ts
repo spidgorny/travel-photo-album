@@ -14,7 +14,7 @@ import {
 	normalizeStoredDescription,
 	readStoredMetaDirectory,
 } from "../lib/file-meta.ts";
-import { joinSectionPath } from "../lib/files.ts";
+import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
 
 async function main() {
 	const { collectionInput } = parseArgs(process.argv.slice(2));
@@ -111,12 +111,14 @@ async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
 async function readDirectoryEntries(section, pathSegments) {
 	const directoryPath = joinSectionPath(section.path, pathSegments);
 	const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-	return entries.sort((firstEntry, secondEntry) =>
+	return entries
+		.filter((entry) => !isHiddenPathSegment(entry.name))
+		.sort((firstEntry, secondEntry) =>
 		firstEntry.name.localeCompare(secondEntry.name, undefined, {
 			numeric: true,
 			sensitivity: "base",
 		}),
-	);
+		);
 }
 
 function applySectionBounds(entries, section, pathSegments) {

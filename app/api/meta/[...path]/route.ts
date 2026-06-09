@@ -84,13 +84,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
 	try {
 		const section = getSectionById(config.sections, sectionInput);
 		invariant(section, "section");
-		const numericSectionId = getSectionIndex(config.sections, section);
 		const metaSearchKeys = getStoredMetaDirectoryKeys(section, filePath);
 		const storedMeta = await readStoredMetaForFile(section, filePath);
 
 		let metaData: MetaData | null = getMetaByJson(storedMeta);
 		if (!metaData) {
-			metaData = await getMetaByFile(numericSectionId, section, filePath);
+			metaData = await getMetaByFile(section, filePath);
 		}
 
 		return NextResponse.json(
@@ -158,18 +157,18 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 }
 
 async function getMetaByFile(
-	sectionId: number,
 	section: ConfigSection,
 	filePath: string[],
 ): Promise<FileMetaData | VideoMetaData> {
 	const mediaKind = getMediaKind(filePath);
 	if (mediaKind === "video") {
-		return getVideoMeta(sectionId, section, filePath);
+		return getVideoMeta(section, filePath);
 	}
 	if (mediaKind !== "image") {
 		return buildBasicFileMetaData(section, filePath) as FileMetaData;
 	}
 	const metaData = await buildImageMetaData(section, filePath);
+	const sectionId = getSectionIndex(config.sections, section);
 
 	const queue = new ThumbQueue();
 	await queue.enqueue({
@@ -197,7 +196,6 @@ function getMetaByJson(fileMeta: StoredDirectoryMetaEntry | null): JsonMetaData 
 }
 
 async function getVideoMeta(
-	sectionId: number,
 	section: ConfigSection,
 	filePath: string[],
 ): Promise<VideoMetaData> {
@@ -210,6 +208,7 @@ async function getVideoMeta(
 				return;
 			}
 
+			const sectionId = getSectionIndex(config.sections, section);
 			const queue = new ThumbQueue();
 			await queue.enqueue({
 				action: thumbJobActions.storeMetaForVideo,

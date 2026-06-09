@@ -14,7 +14,7 @@ import {
 	descriptionJobActions,
 	isDescriptionQueueConfigured,
 } from "../lib/description-jobs.ts";
-import { joinSectionPath } from "../lib/files.ts";
+import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
 import {
 hasExifOrientationTransform,
 normalizeStoredDescription,
@@ -198,7 +198,7 @@ return { shouldEnqueue: true, reason: "force-rotated", force: true };
 }
 
 const [hasThumb, storedMeta] = await Promise.all([
-hasStoredSectionThumb(sectionId, section, filePath, variant),
+hasStoredSectionThumb(section, filePath, variant),
 readStoredMetaForFile(section, filePath),
 ]);
 const hasDescription = Boolean(normalizeStoredDescription(storedMeta?.description));
@@ -255,7 +255,9 @@ console.log(
 async function readDirectoryEntries(section, pathSegments) {
 const directoryPath = joinSectionPath(section.path, pathSegments);
 const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-return entries.sort((firstEntry, secondEntry) =>
+return entries
+.filter((entry) => !isHiddenPathSegment(entry.name))
+.sort((firstEntry, secondEntry) =>
 firstEntry.name.localeCompare(secondEntry.name, undefined, {
 numeric: true,
 sensitivity: "base",

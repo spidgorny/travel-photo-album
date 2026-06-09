@@ -58,9 +58,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 				}
 
 				const [hasThumb, metaEntry, kvThumbMeta] = await Promise.all([
-					hasStoredSectionThumb(sectionId, section, relativePath, variant),
+					hasStoredSectionThumb(section, relativePath, variant),
 					readStoredMetaForFile(section, relativePath),
-					section.thumbPath ? null : getStoredThumbMetaEntry(sectionId, relativePath, variant),
+					section.thumbPath ? null : getStoredThumbMetaEntry(section.name, relativePath, variant),
 				]);
 
 				if (hasThumb) {

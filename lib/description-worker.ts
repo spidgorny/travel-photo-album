@@ -9,7 +9,7 @@ import {
 	writeStoredMetaForFile,
 } from "./file-meta.ts";
 import { isAutoDescriptionEnabled, maybeGenerateImageDescription } from "./image-description.ts";
-import { joinSectionPath } from "./files.ts";
+import { hasHiddenPathSegment, joinSectionPath } from "./files.ts";
 import {
 	getEnsureSectionThumbVariant,
 	normalizeFilePath,
@@ -58,6 +58,14 @@ async function warmImageDescription(payload) {
 	invariant(Number.isInteger(sectionId), "sectionId is required for generate-image-description");
 	invariant(section, "section not found");
 	invariant(section.path, "section.path");
+	if (hasHiddenPathSegment(filePath)) {
+		return {
+			action: descriptionWorkerJobNames.generateImageDescription,
+			filePath: filePath.join("/"),
+			skipped: true,
+			reason: "hidden-path",
+		};
+	}
 	if (!isAutoDescriptionEnabled()) {
 		return {
 			action: descriptionWorkerJobNames.generateImageDescription,
@@ -84,7 +92,7 @@ async function warmImageDescription(payload) {
 			reason: "already-described",
 		};
 	}
-	const thumb = await ensureSectionThumb(sectionId, section, filePath, variant);
+	const thumb = await ensureSectionThumb(section, filePath, variant);
 	const metaData = existingMeta ?? (await buildImageMetaData(section, filePath));
 	const generatedDescription = await maybeGenerateImageDescription({
 		section,

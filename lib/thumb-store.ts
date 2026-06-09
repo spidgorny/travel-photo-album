@@ -39,15 +39,15 @@ function warnThumbKv(message, error = null) {
 	console.warn("thumb-kvrocks", message, error?.message ?? "");
 }
 
-function buildThumbHash(sectionId, filePath, variant = `w${thumbnailTargetWidth}-jpeg`) {
+function buildThumbHash(sectionName, filePath, variant = `w${thumbnailTargetWidth}-jpeg`) {
 	const shasum = crypto.createHash("sha1");
 	return shasum
-		.update(JSON.stringify({ sectionId, filePath: filePath.join("/"), variant }))
+		.update(JSON.stringify({ sectionName, filePath: filePath.join("/"), variant }))
 		.digest("hex");
 }
 
-function buildThumbKeys(sectionId, filePath, variant) {
-	const hash = buildThumbHash(sectionId, filePath, variant);
+function buildThumbKeys(sectionName, filePath, variant) {
+	const hash = buildThumbHash(sectionName, filePath, variant);
 	return {
 		blobKey: `${thumbKvPrefix}:blob:${hash}`,
 		metaKey: `${thumbKvPrefix}:meta:${hash}`,
@@ -191,13 +191,13 @@ export async function closeThumbKvClient() {
 	await client.quit().catch(() => {});
 }
 
-async function getThumbMeta(sectionId, filePath, variant) {
+async function getThumbMeta(sectionName, filePath, variant) {
 	const client = await getThumbKvClient();
 	if (!client) {
 		return null;
 	}
 	try {
-		const { metaKey } = buildThumbKeys(sectionId, filePath, variant);
+		const { metaKey } = buildThumbKeys(sectionName, filePath, variant);
 		const meta = await client.hGetAll(metaKey);
 		if (!meta || !Object.keys(meta).length) {
 			return null;
@@ -210,8 +210,8 @@ async function getThumbMeta(sectionId, filePath, variant) {
 	}
 }
 
-export async function getStoredThumbMetaEntry(sectionId, filePath, variant) {
-	const meta = await getThumbMeta(sectionId, filePath, variant);
+export async function getStoredThumbMetaEntry(sectionName, filePath, variant) {
+	const meta = await getThumbMeta(sectionName, filePath, variant);
 	if (!meta) {
 		return null;
 	}
@@ -224,13 +224,13 @@ export async function getStoredThumbMetaEntry(sectionId, filePath, variant) {
 	};
 }
 
-async function setThumbMeta(sectionId, filePath, metadata, variant) {
+async function setThumbMeta(sectionName, filePath, metadata, variant) {
 	const client = await getThumbKvClient();
 	if (!client) {
 		return;
 	}
 	try {
-		const { metaKey } = buildThumbKeys(sectionId, filePath, variant);
+		const { metaKey } = buildThumbKeys(sectionName, filePath, variant);
 		const normalized = Object.fromEntries(
 			Object.entries(metadata).filter(([, value]) => value !== undefined && value !== null),
 		);
@@ -244,16 +244,16 @@ async function setThumbMeta(sectionId, filePath, metadata, variant) {
 	}
 }
 
-export async function getStoredThumb(sectionId, filePath, variant) {
+export async function getStoredThumb(sectionName, filePath, variant) {
 	const client = await getThumbKvClient();
 	if (!client) {
 		return null;
 	}
 	try {
-		const { blobKey } = buildThumbKeys(sectionId, filePath, variant);
+		const { blobKey } = buildThumbKeys(sectionName, filePath, variant);
 		const [encoded, meta] = await Promise.all([
 			client.get(blobKey),
-			getThumbMeta(sectionId, filePath, variant),
+			getThumbMeta(sectionName, filePath, variant),
 		]);
 		if (!encoded) {
 			return null;
@@ -272,16 +272,16 @@ export async function getStoredThumb(sectionId, filePath, variant) {
 	}
 }
 
-export async function storeThumb(sectionId, filePath, thumb, variant) {
+export async function storeThumb(sectionName, filePath, thumb, variant) {
 	const client = await getThumbKvClient();
 	if (!client) {
 		return false;
 	}
 	try {
-		const { blobKey } = buildThumbKeys(sectionId, filePath, variant);
+		const { blobKey } = buildThumbKeys(sectionName, filePath, variant);
 		await client.set(blobKey, thumb.buffer.toString("base64"));
 		await setThumbMeta(
-			sectionId,
+			sectionName,
 			filePath,
 			{
 				mimeType: thumb.mimeType,
@@ -304,8 +304,8 @@ export async function storeThumb(sectionId, filePath, thumb, variant) {
 	}
 }
 
-export async function getStoredDimensions(sectionId, filePath, variant) {
-	const meta = await getThumbMeta(sectionId, filePath, variant);
+export async function getStoredDimensions(sectionName, filePath, variant) {
+	const meta = await getThumbMeta(sectionName, filePath, variant);
 	if (!meta) {
 		return null;
 	}
@@ -322,9 +322,9 @@ export async function getStoredDimensions(sectionId, filePath, variant) {
 	};
 }
 
-export async function storeDimensions(sectionId, filePath, dimensions, variant) {
+export async function storeDimensions(sectionName, filePath, dimensions, variant) {
 	await setThumbMeta(
-		sectionId,
+		sectionName,
 		filePath,
 		{
 			originalWidth: String(dimensions.width),
@@ -417,7 +417,6 @@ async function getDimensionsFromBuffer(buffer) {
 }
 
 export async function getImageDimensions(
-	sectionId,
 	section,
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
@@ -431,7 +430,7 @@ export async function getImageDimensions(
 			dominantColor: defaultDominantColor,
 		};
 	}
-	const cached = await getStoredDimensions(sectionId, filePath, variant);
+	const cached = await getStoredDimensions(section.name, filePath, variant);
 	if (cached) {
 		return cached;
 	}
@@ -444,33 +443,26 @@ export async function getImageDimensions(
 		...discovered,
 		dominantColor,
 	};
-	await storeDimensions(sectionId, filePath, enriched, variant);
+	await storeDimensions(section.name, filePath, enriched, variant);
 	return enriched;
 }
 
 export async function ensureImageThumb(
-	sectionId,
 	section,
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
 	sourceBuffer = undefined,
 ) {
 	invariant(!isVideoPath(filePath), "ensureImageThumb only supports image files");
-	const cached = await getStoredThumb(sectionId, filePath, variant);
+	const cached = await getStoredThumb(section.name, filePath, variant);
 	if (cached) {
 		return {
 			...cached,
 			source: "kvrocks",
 		};
 	}
-	const thumb = await buildGeneratedImageThumb(
-		sectionId,
-		section,
-		filePath,
-		variant,
-		sourceBuffer,
-	);
-	await storeThumb(sectionId, filePath, thumb, variant);
+	const thumb = await buildGeneratedImageThumb(section, filePath, variant, sourceBuffer);
+	await storeThumb(section.name, filePath, thumb, variant);
 	return {
 		...thumb,
 		source: "generated",
@@ -478,7 +470,6 @@ export async function ensureImageThumb(
 }
 
 export async function buildGeneratedImageThumb(
-	sectionId,
 	section,
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
@@ -488,7 +479,7 @@ export async function buildGeneratedImageThumb(
 	invariant(section.path, "section.path");
 	const fullPath = joinSectionPath(section.path, filePath);
 	const sourceInput = sourceBuffer ?? fullPath;
-	const dimensions = await getImageDimensions(sectionId, section, filePath, variant, sourceBuffer);
+	const dimensions = await getImageDimensions(section, filePath, variant, sourceBuffer);
 	const buffer = await sharp(sourceInput)
 		.rotate()
 		.resize({ width: thumbnailTargetWidth })
@@ -528,7 +519,6 @@ function getExistingDiskThumb(thumbRoot, filePath, candidates = [null]) {
 }
 
 export async function readStoredSectionThumb(
-	sectionId,
 	section,
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
@@ -536,7 +526,7 @@ export async function readStoredSectionThumb(
 ) {
 	if (isVideoPath(filePath)) {
 		const { requestedVariant } = parseRequestedVideoVariant(variant, frameIndex);
-		const cachedVideoThumb = await getStoredThumb(sectionId, filePath, requestedVariant);
+		const cachedVideoThumb = await getStoredThumb(section.name, filePath, requestedVariant);
 		if (cachedVideoThumb) {
 			return {
 				kind: "buffer",
@@ -566,7 +556,7 @@ export async function readStoredSectionThumb(
 	}
 
 	if (!section.thumbPath) {
-		const cachedThumb = await getStoredThumb(sectionId, filePath, variant);
+		const cachedThumb = await getStoredThumb(section.name, filePath, variant);
 		if (!cachedThumb) {
 			return null;
 		}
@@ -590,10 +580,10 @@ export async function readStoredSectionThumb(
 	};
 }
 
-export async function hasStoredSectionThumb(sectionId, section, filePath, variant) {
+export async function hasStoredSectionThumb(section, filePath, variant) {
 	if (isVideoPath(filePath)) {
 		const { requestedVariant } = parseRequestedVideoVariant(variant);
-		const existing = await getStoredThumb(sectionId, filePath, requestedVariant);
+		const existing = await getStoredThumb(section.name, filePath, requestedVariant);
 		if (existing) {
 			return true;
 		}
@@ -604,7 +594,7 @@ export async function hasStoredSectionThumb(sectionId, section, filePath, varian
 	}
 
 	if (!section.thumbPath) {
-		const existing = await getStoredThumb(sectionId, filePath, variant);
+		const existing = await getStoredThumb(section.name, filePath, variant);
 		return Boolean(existing);
 	}
 
@@ -638,14 +628,13 @@ async function ensureResizedImageThumb(section, filePath, sourceBuffer = undefin
 }
 
 export async function persistGeneratedImageThumb(
-	sectionId,
 	section,
 	filePath,
 	thumb,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
 ) {
 	if (!section.thumbPath) {
-		await storeThumb(sectionId, filePath, thumb, variant);
+		await storeThumb(section.name, filePath, thumb, variant);
 		return {
 			kind: "buffer",
 			...thumb,
@@ -703,10 +692,10 @@ async function ensureVideoThumb(section, filePath) {
 	};
 }
 
-async function ensureVideoThumbSet(sectionId, section, filePath, variant, frameIndex) {
+async function ensureVideoThumbSet(section, filePath, variant, frameIndex) {
 	const { baseVariant, requestedVariant, frameIndex: resolvedFrameIndex } =
 		parseRequestedVideoVariant(variant, frameIndex);
-	const cached = await getStoredThumb(sectionId, filePath, requestedVariant);
+	const cached = await getStoredThumb(section.name, filePath, requestedVariant);
 	if (cached) {
 		return {
 			...cached,
@@ -750,7 +739,7 @@ async function ensureVideoThumbSet(sectionId, section, filePath, variant, frameI
 				height: metadata.height ?? Math.round((width * 9) / 16),
 				dominantColor: await getDominantColorFromBuffer(buffer),
 			};
-			await storeThumb(sectionId, filePath, thumb, buildVideoFrameVariant(baseVariant, index));
+			await storeThumb(section.name, filePath, thumb, buildVideoFrameVariant(baseVariant, index));
 			if (index === resolvedFrameIndex) {
 				requestedThumb = thumb;
 			}
@@ -762,7 +751,7 @@ async function ensureVideoThumbSet(sectionId, section, filePath, variant, frameI
 			source: `generated:ffmpeg:${generatedFiles.length}`,
 		};
 	} catch (error) {
-		const fallback = await getStoredThumb(sectionId, filePath, requestedVariant);
+		const fallback = await getStoredThumb(section.name, filePath, requestedVariant);
 		if (fallback) {
 			return {
 				...fallback,
@@ -783,7 +772,6 @@ function buildVideoTimemarks() {
 }
 
 export async function ensureSectionThumb(
-	sectionId,
 	section,
 	filePath,
 	variant = `w${thumbnailTargetWidth}-jpeg`,
@@ -794,7 +782,7 @@ export async function ensureSectionThumb(
 		try {
 			return {
 				kind: "buffer",
-				...(await ensureVideoThumbSet(sectionId, section, filePath, variant, frameIndex)),
+				...(await ensureVideoThumbSet(section, filePath, variant, frameIndex)),
 			};
 		} catch (error) {
 			if (!section.thumbPath) {
@@ -810,7 +798,7 @@ export async function ensureSectionThumb(
 	if (!section.thumbPath) {
 		return {
 			kind: "buffer",
-			...(await ensureImageThumb(sectionId, section, filePath, variant, options?.sourceBuffer)),
+			...(await ensureImageThumb(section, filePath, variant, options?.sourceBuffer)),
 		};
 	}
 

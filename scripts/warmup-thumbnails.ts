@@ -15,7 +15,7 @@ import {
 	descriptionJobActions,
 	isDescriptionQueueConfigured,
 } from "../lib/description-jobs.ts";
-import { joinSectionPath } from "../lib/files.ts";
+import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
 import {
 	serializeSectionForWorker,
 	thumbJobActions,
@@ -202,7 +202,7 @@ async function getIndexState(
 	}
 
 	const [hasThumb, storedMeta] = await Promise.all([
-		hasStoredSectionThumb(sectionId, section, filePath, variant),
+		hasStoredSectionThumb(section, filePath, variant),
 		readStoredMetaForFile(section, filePath),
 	]);
 	const hasDescription = Boolean(normalizeStoredDescription(storedMeta?.description));
@@ -257,12 +257,14 @@ async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
 async function readDirectoryEntries(section, pathSegments) {
 	const directoryPath = joinSectionPath(section.path, pathSegments);
 	const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-	return entries.sort((firstEntry, secondEntry) =>
+	return entries
+		.filter((entry) => !isHiddenPathSegment(entry.name))
+		.sort((firstEntry, secondEntry) =>
 		firstEntry.name.localeCompare(secondEntry.name, undefined, {
 			numeric: true,
 			sensitivity: "base",
 		}),
-	);
+		);
 }
 
 function applySectionBounds(entries, section, pathSegments) {

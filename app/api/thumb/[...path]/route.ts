@@ -53,13 +53,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 		const numericSectionId = getSectionIndex(config.sections, section);
 		const shouldWarmMetadata = mediaKind === "image";
 		const [thumb, storedMeta] = await Promise.all([
-			ensureSectionThumb(
-				numericSectionId,
-				section,
-				filePath,
-				variant,
-				frameIndex,
-			),
+			ensureSectionThumb(section, filePath, variant, frameIndex),
 			shouldWarmMetadata ? readStoredMetaForFile(section, filePath) : Promise.resolve(null),
 		]);
 		const missingDescription =

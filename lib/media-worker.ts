@@ -17,7 +17,7 @@ import {
 	writeStoredMetaForFile,
 	normalizeStoredPhash,
 } from "./file-meta.ts";
-import { joinSectionPath } from "./files.ts";
+import { hasHiddenPathSegment, joinSectionPath } from "./files.ts";
 import { isAutoDescriptionEnabled } from "./image-description.ts";
 import { upsertSearchEntryFromStoredMeta } from "./search-index.ts";
 import {
@@ -354,6 +354,14 @@ async function warmSectionThumb(payload) {
 	invariant(Number.isInteger(sectionId), "sectionId is required for warm-section-file");
 	invariant(section, "section not found");
 	invariant(section.path, "section.path");
+	if (hasHiddenPathSegment(filePath)) {
+		return withPipeline({
+			action: mediaJobNames.warmSectionFile,
+			filePath: filePath.join("/"),
+			skipped: true,
+			reason: "hidden-path",
+		}, steps);
+	}
 	const mediaKind = getMediaKind(filePath);
 	if (mediaKind === "unsupported") {
 	return withPipeline({
@@ -374,7 +382,7 @@ async function warmSectionThumb(payload) {
 		"inspect existing thumb + metadata",
 		() =>
 			Promise.all([
-				hasStoredSectionThumb(sectionId, section, filePath, variant),
+				hasStoredSectionThumb(section, filePath, variant),
 				readStoredMetaForFile(section, filePath),
 			]),
 	);
@@ -384,7 +392,7 @@ async function warmSectionThumb(payload) {
 		mediaKind === "image" && isDescriptionQueueConfigured() && !hasDescription;
 	const needsPhash = mediaKind === "image" && !hasPhash;
 	if (hasThumb && storedMeta && needsPhash) {
-		const thumbForPhash = await readStoredSectionThumb(sectionId, section, filePath, variant);
+		const thumbForPhash = await readStoredSectionThumb(section, filePath, variant);
 		const metaData = await runPipelineStep(steps, "refresh metadata from existing thumb", async () =>
 			buildImageMetaData(section, filePath, {
 				sourceBuffer: getImageSourceBuffer ? await getImageSourceBuffer() : undefined,
@@ -450,23 +458,16 @@ async function warmSectionThumb(payload) {
 					getImageSourceBuffer(),
 				);
 				const generatedThumb = await runPipelineStep(steps, "build thumbnail buffer", () =>
-					buildGeneratedImageThumb(sectionId, section, filePath, variant, sourceBuffer),
+					buildGeneratedImageThumb(section, filePath, variant, sourceBuffer),
 				);
 				return runPipelineStep(steps, "store generated thumbnail", () =>
-					persistGeneratedImageThumb(sectionId, section, filePath, generatedThumb, variant),
+					persistGeneratedImageThumb(section, filePath, generatedThumb, variant),
 				);
 			})()
 			: await runPipelineStep(steps, "generate thumbnail", async () =>
-				ensureSectionThumb(
-					sectionId,
-					section,
-					filePath,
-					variant,
-					undefined,
-					{
-						sourceBuffer: getImageSourceBuffer ? await getImageSourceBuffer() : undefined,
-					},
-				),
+				ensureSectionThumb(section, filePath, variant, undefined, {
+					sourceBuffer: getImageSourceBuffer ? await getImageSourceBuffer() : undefined,
+				}),
 			);
 	if (mediaKind === "image" && !isVideoPath(filePath)) {
 		const thumbPhashSource =
