@@ -1,33 +1,33 @@
 {
   "sections": [
     {
-      "name": "C",
+      "name": "c",
       "winPath": "c:/"
     },
     {
-      "name": "P:/Digital Photo",
+      "name": "p-digital-photo",
       "linuxPath": "/media/nas/photo/Digital Photo",
       "winPath": "P:/Digital Photo",
       "thumbPath": "./data/Digital_Photo"
     },
     {
-      "name": "Marina 1+ 5t 2022-04",
+      "name": "marina-1-5t-2022-04",
       "linuxPath": "/media/nas/photo/Photos/2022/Marina-5t/2022-04",
       "thumbPath": "./data/synology-photos/2022/Marina-5t/2022-04"
     },
     {
-      "name": "P:/Photos",
+      "name": "p-photos",
       "linuxPath": "/media/nas/photo/Photos",
       "thumbPath": "./data/synology-photos"
     },
     {
-      "name": "DJI Drone",
+      "name": "dji-drone",
       "linuxPath": "/media/nas/photo/Photos/2022/DJI",
       "from": "DJI_0166.MP4"
     },
     {
-      "name": "/Volumes/photo/new",
-      "linuxPath": "/media/nas/photo/Photos/2022/DJI",
+      "name": "volumes-photo-new",
+      "linuxPath": "/media/nas/photo/new",
       "macPath": "/Volumes/photo/new"
     }
   ]
