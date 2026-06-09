@@ -41,6 +41,8 @@ import {
 
 const ANSI_RED = "\u001b[31m";
 const ANSI_RESET = "\u001b[0m";
+const SCAN_CONCURRENCY = 20;
+const BATCH_SIZE = 250;
 
 // Output helpers — use inline (overwrite) for file-level noise, newlines for folders/errors.
 const isTTY = process.stdout.isTTY;
@@ -106,74 +108,80 @@ async function main() {
 	const variant = `w${thumbnailTargetWidth}-jpeg`;
 	const queue = new ThumbQueue();
 	const descriptionQueue = new DescriptionQueue();
-	await scanCollectionFiles(section, [], scanStats, async (filePath, index) => {
-		const progressLabel = `[${index}]`;
-		const fullPath = joinSectionPath(section.path, filePath);
-		const mimeType = mime.lookup(fullPath) || "";
-		const isMedia = mimeType.startsWith("image/") || isVideoPath(filePath);
-		if (!isMedia) {
-			skipped += 1;
-			printLine(`skipped ${progressLabel} ${filePath.join("/")} (${mimeType || "unknown"})`);
-			return;
-		}
 
-		try {
-			const indexState = await getIndexState(
-				sectionId,
-				section,
-				filePath,
-				variant,
-				force,
-				forceRotated,
-			);
-			if (!indexState.shouldEnqueue) {
-				skipped += 1;
-				printInline(`skip ${progressLabel} ${filePath.join("/")} (already indexed)`);
-				return;
-			}
-			const queuePayload =
-				indexState.reason === "missing-description"
-					? {
-							action: descriptionJobActions.generateImageDescription,
-							sectionId,
-							section: serializeSectionForWorker(section),
-							filePath,
-							variant,
-							force: indexState.force,
-						}
-					: {
-							action: thumbJobActions.warmSectionFile,
-							sectionId,
-							section: serializeSectionForWorker(section),
-							filePath,
-							variant,
-							force: indexState.force,
-						};
-			const job =
-				indexState.reason === "missing-description"
-					? await descriptionQueue.enqueue(queuePayload)
-					: await queue.enqueue(queuePayload);
-			if (!job) {
-				throw new Error(
-					indexState.reason === "missing-description"
-						? "description queue is not configured"
-						: "thumb queue is not configured",
-				);
-			}
-			enqueued += 1;
-			printInline(
-				`queued ${progressLabel} ${filePath.join("/")} (${job.name}: ${indexState.reason})`,
-			);
-		} catch (error) {
-			failed += 1;
-			const message = error instanceof Error ? error.message : String(error);
-			printError(`failed ${progressLabel} ${filePath.join("/")} ${message}`);
-		}
-	});
-
+	// Phase 1: walk the directory tree, store folder listings in Kvrocks
+	const allFiles = await collectFiles(section, [], scanStats);
 	printLine(
-		`Scan complete: ${scanStats.directories} director${scanStats.directories === 1 ? "y" : "ies"}, ${scanStats.files} candidate files`,
+		`Discovered ${allFiles.length} files in ${scanStats.directories} director${scanStats.directories === 1 ? "y" : "ies"}`,
 	);
+
+	// Phase 2: check each file concurrently (SCAN_CONCURRENCY parallel Kvrocks lookups)
+	type PendingJob = { type: "thumb" | "description"; payload: object; reason: string };
+	const pendingJobs = await processPool<string[], PendingJob | null>(
+		allFiles,
+		SCAN_CONCURRENCY,
+		async (filePath, i) => {
+			const progressLabel = `[${i + 1}/${allFiles.length}]`;
+			const fullPath = joinSectionPath(section.path, filePath);
+			const mimeType = mime.lookup(fullPath) || "";
+			const isMedia = mimeType.startsWith("image/") || isVideoPath(filePath);
+			if (!isMedia) {
+				skipped += 1;
+				printLine(`skipped ${progressLabel} ${filePath.join("/")} (${mimeType || "unknown"})`);
+				return null;
+			}
+			try {
+				const indexState = await getIndexState(sectionId, section, filePath, variant, force, forceRotated);
+				if (!indexState.shouldEnqueue) {
+					skipped += 1;
+					printInline(`skip ${progressLabel} ${filePath.join("/")} (already indexed)`);
+					return null;
+				}
+				const type = indexState.reason === "missing-description" ? "description" : "thumb";
+				const payload =
+					type === "description"
+						? { action: descriptionJobActions.generateImageDescription, sectionId, section: serializeSectionForWorker(section), filePath, variant, force: indexState.force }
+						: { action: thumbJobActions.warmSectionFile, sectionId, section: serializeSectionForWorker(section), filePath, variant, force: indexState.force };
+				printInline(`pending ${progressLabel} ${filePath.join("/")} (${indexState.reason})`);
+				return { type, payload, reason: indexState.reason };
+			} catch (error) {
+				failed += 1;
+				const message = error instanceof Error ? error.message : String(error);
+				printError(`failed ${progressLabel} ${filePath.join("/")} ${message}`);
+				return null;
+			}
+		},
+	);
+
+	// Phase 3: batch-enqueue all collected jobs
+	const thumbJobs = pendingJobs.filter((j): j is PendingJob => j?.type === "thumb");
+	const descJobs = pendingJobs.filter((j): j is PendingJob => j?.type === "description");
+	const totalToEnqueue = thumbJobs.length + descJobs.length;
+	printLine(`Enqueueing ${totalToEnqueue} jobs (${thumbJobs.length} thumb, ${descJobs.length} description)...`);
+
+	for (let i = 0; i < thumbJobs.length; i += BATCH_SIZE) {
+		const batch = thumbJobs.slice(i, i + BATCH_SIZE);
+		const jobs = await queue.enqueueBulk(batch.map((j) => j.payload as never));
+		if (!jobs.length && batch.length) {
+			printError(`${ANSI_RED}thumb queue not configured — no jobs added${ANSI_RESET}`);
+			failed += batch.length;
+			break;
+		}
+		enqueued += batch.length;
+		printLine(`enqueued ${enqueued}/${totalToEnqueue} thumb jobs`);
+	}
+
+	for (let i = 0; i < descJobs.length; i += BATCH_SIZE) {
+		const batch = descJobs.slice(i, i + BATCH_SIZE);
+		const jobs = await descriptionQueue.enqueueBulk(batch.map((j) => j.payload as never));
+		if (!jobs.length && batch.length) {
+			printError(`${ANSI_RED}description queue not configured — no jobs added${ANSI_RESET}`);
+			failed += batch.length;
+			break;
+		}
+		enqueued += batch.length;
+		printLine(`enqueued ${enqueued}/${totalToEnqueue} total jobs`);
+	}
 
 	const summary = `Warmup complete for collection: ${section.name} (${enqueued} enqueued, ${skipped} skipped, ${failed} failed) in ${formatDuration(Date.now() - startedAt)}`;
 	if (failed > 0) {
@@ -243,8 +251,26 @@ async function getIndexState(
 	};
 }
 
-async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
-	invariant(section.path, "section.path");
+// Runs fn on each item with at most `concurrency` in-flight at once.
+async function processPool<T, R>(
+	items: T[],
+	concurrency: number,
+	fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+	const results: R[] = new Array(items.length);
+	let next = 0;
+	async function worker() {
+		while (next < items.length) {
+			const i = next++;
+			results[i] = await fn(items[i], i);
+		}
+	}
+	await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+	return results;
+}
+
+// Phase 1: walk directory tree, store folder listings, return all file paths.
+async function collectFiles(section, rootSegments, scanStats): Promise<string[][]> {
 	const displayPath = rootSegments.length > 0 ? rootSegments.join("/") : ".";
 	printInline(`reading ${displayPath}...`);
 	const entries = await readDirectoryEntries(section, rootSegments);
@@ -256,17 +282,18 @@ async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
 
 	await storeFolderListing(section, rootSegments, boundedEntries);
 
+	const files: string[][] = [];
 	for (const entry of boundedEntries) {
 		const nextPath = [...rootSegments, entry.name];
 		if (entry.isDirectory()) {
-			await scanCollectionFiles(section, nextPath, scanStats, onFile);
-			continue;
-		}
-		if (entry.isFile()) {
+			const subFiles = await collectFiles(section, nextPath, scanStats);
+			files.push(...subFiles);
+		} else if (entry.isFile()) {
 			scanStats.files += 1;
-			await onFile(nextPath, scanStats.files);
+			files.push(nextPath);
 		}
 	}
+	return files;
 }
 
 async function readDirectoryEntries(section, pathSegments) {

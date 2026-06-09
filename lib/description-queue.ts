@@ -101,6 +101,19 @@ export class DescriptionQueue {
 		});
 	}
 
+	async enqueueBulk(dataItems: DescriptionJobData[]) {
+		if (!dataItems.length) return [];
+		const queue = await getDescriptionQueue();
+		if (!queue) return [];
+		return queue.addBulk(
+			dataItems.map((data) => ({
+				name: data.action,
+				data,
+				opts: { jobId: `description:${data.action}:${this.makeHash(data)}` },
+			})),
+		);
+	}
+
 	makeHash(data: DescriptionJobData) {
 		const shasum = crypto.createHash("sha1");
 		return shasum.update(JSON.stringify(data)).digest("hex");

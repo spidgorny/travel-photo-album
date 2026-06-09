@@ -111,6 +111,19 @@ export class ThumbQueue {
 		});
 	}
 
+	async enqueueBulk(dataItems: ThumbJobData[]) {
+		if (!dataItems.length) return [];
+		const queue = await getThumbQueue();
+		if (!queue) return [];
+		return queue.addBulk(
+			dataItems.map((data) => ({
+				name: data.action,
+				data,
+				opts: { jobId: `thumb:${data.action}:${this.makeHash(data)}` },
+			})),
+		);
+	}
+
 	makeHash(data: ThumbJobData) {
 		const shasum = crypto.createHash("sha1");
 		return shasum.update(JSON.stringify(data)).digest("hex");
