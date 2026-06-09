@@ -1,7 +1,6 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import exifr from "exifr";
 import sizeOf from "image-size";
 import mime from "mime-types";
 import sharp from "sharp";
@@ -25,6 +24,7 @@ const phashSize = 8;
 const phashSampleSize = 32;
 
 const locationCache = new Map<string, FileLocationLabel | null>();
+let exifrModulePromise: Promise<typeof import("exifr")> | null = null;
 
 export function getMetaFilePath(section: ConfigSection, filePath: string[]): string {
 	const metaRoot = section.thumbPath;
@@ -663,6 +663,7 @@ export function buildBasicFileMetaData(
 
 async function extractGpsCoordinates(input: string | Buffer): Promise<FileGpsCoordinates | null> {
 	try {
+		const exifr = await getExifr();
 		const gps = await exifr.gps(input);
 		if (!gps) {
 			return null;
@@ -676,6 +677,13 @@ async function extractGpsCoordinates(input: string | Buffer): Promise<FileGpsCoo
 	} catch {
 		return null;
 	}
+}
+
+async function getExifr() {
+	if (!exifrModulePromise) {
+		exifrModulePromise = import("exifr");
+	}
+	return exifrModulePromise;
 }
 
 function normalizeCoordinate(value: unknown): number | null {
