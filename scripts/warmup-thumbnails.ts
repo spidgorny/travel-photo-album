@@ -42,6 +42,37 @@ import {
 const ANSI_RED = "\u001b[31m";
 const ANSI_RESET = "\u001b[0m";
 
+// Output helpers — use inline (overwrite) for file-level noise, newlines for folders/errors.
+const isTTY = process.stdout.isTTY;
+let lastLineWasInline = false;
+
+function printLine(message: string) {
+	if (lastLineWasInline) {
+		process.stdout.write("\n");
+		lastLineWasInline = false;
+	}
+	console.log(message);
+}
+
+function printError(message: string) {
+	if (lastLineWasInline) {
+		process.stderr.write("\n");
+		lastLineWasInline = false;
+	}
+	console.error(message);
+}
+
+function printInline(message: string) {
+	if (!isTTY) {
+		console.log(message);
+		return;
+	}
+	const maxWidth = (process.stdout.columns || 120) - 1;
+	const truncated = message.length > maxWidth ? `${message.slice(0, maxWidth - 1)}…` : message;
+	process.stdout.write(`\r${truncated.padEnd(maxWidth)}`);
+	lastLineWasInline = true;
+}
+
 async function main() {
 	const startedAt = Date.now();
 	const { collectionInput, force, forceRotated } = parseArgs(process.argv.slice(2));
@@ -82,9 +113,7 @@ async function main() {
 		const isMedia = mimeType.startsWith("image/") || isVideoPath(filePath);
 		if (!isMedia) {
 			skipped += 1;
-			console.warn(
-				`skipped ${progressLabel} ${filePath.join("/")} (${mimeType || "unknown"})`,
-			);
+			printLine(`skipped ${progressLabel} ${filePath.join("/")} (${mimeType || "unknown"})`);
 			return;
 		}
 
@@ -99,7 +128,7 @@ async function main() {
 			);
 			if (!indexState.shouldEnqueue) {
 				skipped += 1;
-				console.log(`skip ${progressLabel} ${filePath.join("/")} (already indexed)`);
+				printInline(`skip ${progressLabel} ${filePath.join("/")} (already indexed)`);
 				return;
 			}
 			const queuePayload =
@@ -132,26 +161,26 @@ async function main() {
 				);
 			}
 			enqueued += 1;
-			console.log(
+			printInline(
 				`queued ${progressLabel} ${filePath.join("/")} (${job.name}: ${indexState.reason})`,
 			);
 		} catch (error) {
 			failed += 1;
 			const message = error instanceof Error ? error.message : String(error);
-			console.error(`failed ${progressLabel} ${filePath.join("/")} ${message}`);
+			printError(`failed ${progressLabel} ${filePath.join("/")} ${message}`);
 		}
 	});
 
-	console.log(
+	printLine(
 		`Scan complete: ${scanStats.directories} director${scanStats.directories === 1 ? "y" : "ies"}, ${scanStats.files} candidate files`,
 	);
 
 	const summary = `Warmup complete for collection: ${section.name} (${enqueued} enqueued, ${skipped} skipped, ${failed} failed) in ${formatDuration(Date.now() - startedAt)}`;
 	if (failed > 0) {
-		console.error(`${ANSI_RED}${summary}${ANSI_RESET}`);
+		printError(`${ANSI_RED}${summary}${ANSI_RESET}`);
 		process.exitCode = 1;
 	} else {
-		console.log(summary);
+		printLine(summary);
 	}
 }
 
@@ -216,11 +245,12 @@ async function getIndexState(
 
 async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
 	invariant(section.path, "section.path");
+	const displayPath = rootSegments.length > 0 ? rootSegments.join("/") : ".";
+	printInline(`reading ${displayPath}...`);
 	const entries = await readDirectoryEntries(section, rootSegments);
 	const boundedEntries = applySectionBounds(entries, section, rootSegments);
-	const displayPath = rootSegments.length > 0 ? rootSegments.join("/") : ".";
 	scanStats.directories += 1;
-	console.log(
+	printLine(
 		`scan [dir ${scanStats.directories}] ${displayPath} (${boundedEntries.length} entries)`,
 	);
 
@@ -234,9 +264,6 @@ async function scanCollectionFiles(section, rootSegments, scanStats, onFile) {
 		}
 		if (entry.isFile()) {
 			scanStats.files += 1;
-			if (scanStats.files % 250 === 0) {
-				console.log(`scan progress: discovered ${scanStats.files} files so far`);
-			}
 			await onFile(nextPath, scanStats.files);
 		}
 	}
