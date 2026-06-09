@@ -120,7 +120,7 @@ export function QueueDashboard({
 							</p>
 						</div>
 						<div className="text-sm text-slate-400">
-							Updated <span className="text-slate-200">{formatTimestamp(snapshot.updatedAt)}</span>
+							Updated <span className="text-slate-200" suppressHydrationWarning>{formatTimestamp(snapshot.updatedAt)}</span>
 						</div>
 					</div>
 
