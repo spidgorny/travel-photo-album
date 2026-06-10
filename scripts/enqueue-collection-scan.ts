@@ -33,6 +33,7 @@ import { validateBullMqConnection } from "../lib/thumb-queue.ts";
 import {
 	closeThumbKvClient,
 	hasStoredSectionThumb,
+	isSupportedMediaPath,
 	isVideoPath,
 } from "../lib/thumb-store.ts";
 
@@ -70,10 +71,7 @@ const descriptionBatchEntries = [];
 const variant = getEnsureSectionThumbVariant({});
 
 await scanCollectionFiles(section, [], scanStats, async (filePath) => {
-const fullPath = joinSectionPath(section.path, filePath);
-const mimeType = mime.lookup(fullPath) || "";
-const isMedia = mimeType.startsWith("image/") || isVideoPath(filePath);
-if (!isMedia) {
+if (!isSupportedMediaPath(filePath)) {
 skipped += 1;
 return;
 }

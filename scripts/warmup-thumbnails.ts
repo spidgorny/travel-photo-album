@@ -35,6 +35,7 @@ import {
 import {
 	closeThumbKvClient,
 	hasStoredSectionThumb,
+	isSupportedMediaPath,
 	isVideoPath,
 	thumbnailTargetWidth,
 } from "../lib/thumb-store.ts";
@@ -289,6 +290,10 @@ async function collectFiles(section, rootSegments, scanStats): Promise<string[][
 			const subFiles = await collectFiles(section, nextPath, scanStats);
 			files.push(...subFiles);
 		} else if (entry.isFile()) {
+			if (!isSupportedMediaPath(nextPath)) {
+				scanStats.skipped += 1;
+				continue;
+			}
 			scanStats.files += 1;
 			files.push(nextPath);
 		}

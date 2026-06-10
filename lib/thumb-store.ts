@@ -94,18 +94,41 @@ function getTargetWidthForVariant(variant) {
 	return Number.isFinite(width) && width > 0 ? width : thumbnailTargetWidth;
 }
 
+// Canonical set of supported media extensions (lowercase, no dot prefix).
+// Add new formats here — this list is the single source of truth for what
+// the warmup scanner, thumb worker, and gallery will process.
+export const SUPPORTED_IMAGE_EXTENSIONS = new Set([
+	"jpg", "jpeg", "png", "gif", "webp",
+	"heic", "heif",
+	"tiff", "tif",
+	"bmp",
+	"avif",
+	"dng", "cr2", "nef", "arw", "orf", "rw2", "pef", "sr2",
+]);
+
+export const SUPPORTED_VIDEO_EXTENSIONS = new Set([
+	"mp4", "mov", "avi", "mkv",
+]);
+
+export const SUPPORTED_MEDIA_EXTENSIONS = new Set([
+	...SUPPORTED_IMAGE_EXTENSIONS,
+	...SUPPORTED_VIDEO_EXTENSIONS,
+]);
+
+export function isSupportedMediaPath(filePath: string[]): boolean {
+	const ext = filePath[filePath.length - 1].split(".").pop()?.toLowerCase() ?? "";
+	return SUPPORTED_MEDIA_EXTENSIONS.has(ext);
+}
+
 export function isVideoPath(filePath) {
-	return /\.(mp4|mov|avi|mkv)$/i.test(filePath.join("/"));
+	const ext = filePath[filePath.length - 1].split(".").pop()?.toLowerCase() ?? "";
+	return SUPPORTED_VIDEO_EXTENSIONS.has(ext);
 }
 
 export function getMediaKind(filePath) {
-	if (isVideoPath(filePath)) {
-		return "video";
-	}
-	const mimeType = mime.lookup(filePath.join("/")) || "";
-	if (mimeType.startsWith("image/")) {
-		return "image";
-	}
+	const ext = filePath[filePath.length - 1].split(".").pop()?.toLowerCase() ?? "";
+	if (SUPPORTED_VIDEO_EXTENSIONS.has(ext)) return "video";
+	if (SUPPORTED_IMAGE_EXTENSIONS.has(ext)) return "image";
 	return "unsupported";
 }
 
