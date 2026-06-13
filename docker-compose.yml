@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: docker/nextjs/Dockerfile
     ports:
-      - "3000:3000"
+      - "4567:3000"
     depends_on:
       typesense:
         condition: service_healthy
@@ -90,16 +90,22 @@ services:
 
   kvrocks:
     image: apache/kvrocks:latest
+    user: "${KVROCKS_UID:-1000}:${KVROCKS_GID:-1000}"
     ports:
       - "6666:6666"
-    command: -c /etc/kvrocks/kvrocks.conf
+    command:
+      - -c
+      - /etc/kvrocks/kvrocks.conf
+      - --pidfile
+      - /var/lib/kvrocks/kvrocks.pid
     volumes:
       - ./kvrocks:/var/lib/kvrocks
       - ./docker/kvrocks/kvrocks.conf:/etc/kvrocks/kvrocks.conf:ro
     develop:
       watch:
-        - action: restart
+        - action: sync+restart
           path: ./docker/kvrocks/kvrocks.conf
+          target: /etc/kvrocks/kvrocks.conf
     healthcheck:
       test:
         - CMD
@@ -115,7 +121,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6399:6379"
     volumes:
       - ./redis:/data
     healthcheck:
