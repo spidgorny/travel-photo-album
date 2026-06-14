@@ -1,27 +1,17 @@
-import config from "../lib/config";
-import { PhotoAlbumShell } from "./_components/photo-album-shell";
-import { firstQueryValue, type UISection } from "./_components/ui-types";
+import React from 'react';
+import { HomePageProps } from '../../types/ui-vendor';
 
 interface HomePageProps {
 	searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default async function HomePage({ searchParams }: HomePageProps) {
-	const resolvedSearchParams = (await searchParams) ?? {};
-	const sections = (Array.isArray(config?.sections) ? config.sections : []).map(
-		(section, index) => ({
-			...section,
-			id: index,
-		}),
-	) as UISection[];
-	const sectionQuery = firstQueryValue(resolvedSearchParams.section);
-	const folder = firstQueryValue(resolvedSearchParams.folder) ?? "";
-
+const HomePage: React.FC<HomePageProps> = ({ searchParams }) => {
 	return (
-		<PhotoAlbumShell
-			sections={sections}
-			initialSectionQuery={sectionQuery}
-			initialFolder={folder}
-		/>
+		<main>
+			<h1>Welcome to the Home Page</h1>
+			{searchParams && <p>Loading...</p>}
+		</main>
 	);
-}
+};
+
+export default HomePage;
