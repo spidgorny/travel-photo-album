@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ComponentType, MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Gallery from "react-photo-gallery";
 import useSWR from "swr";
 import { fetcher } from "../../lib/api/http";
@@ -515,16 +516,17 @@ function SelectedImage({ index, photo, margin, left, top, selected, onClick }: S
 				selected ? "ring-2 ring-sky-300/60" : "",
 			].join(" ")}
 		>
-			<img
+			<Image
 				src={photo.source.thumbnail}
 				title={photo.title ?? photo.caption}
 				alt={photo.title ?? photo.caption}
 				onClick={(event) => onClick(event, { photo, index })}
 				onLoad={() => setIsLoaded(true)}
 				onError={() => setIsLoaded(true)}
-				width={photo.width}
-				height={photo.height}
+				width={Math.max(1, Math.round(photo.width))}
+				height={Math.max(1, Math.round(photo.height))}
 				loading="lazy"
+				unoptimized
 				className={[
 					"block h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]",
 					isLoaded ? "opacity-100" : "opacity-0",

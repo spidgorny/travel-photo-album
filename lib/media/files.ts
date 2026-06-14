@@ -1,7 +1,6 @@
 // @ts-nocheck
 import path from "path";
 import readdir from "@jsdevtools/readdir-enhanced";
-import fs from "fs";
 import invariant from "tiny-invariant";
 import type { ConfigSection } from "../config/config.ts";
 import type {
@@ -131,7 +130,7 @@ export function getFileDate(
 	const fileName = path.basename(pathName);
 	const match = fileName.match(/(20\d\d)(\d\d)(\d\d)/);
 	if (match) {
-		let date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+		const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 		return date;
 	}
 

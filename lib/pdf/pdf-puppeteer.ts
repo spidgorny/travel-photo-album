@@ -3,7 +3,7 @@
 import puppeteer from "puppeteer";
 
 export async function html2pdf(html) {
-	let browser;
+	const browser = await puppeteer.launch();
 	// console.log({ path: await chromium.executablePath });
 	// if (await chromium.executablePath) {
 	// 	browser = await chromium.puppeteer.launch({
@@ -14,13 +14,12 @@ export async function html2pdf(html) {
 	// 		ignoreHTTPSErrors: true,
 	// 	});
 	// } else {
-	browser = await puppeteer.launch();
 	// }
 
-	let page = await browser.newPage();
+	const page = await browser.newPage();
 	// await page.goto("https://google.com");
 	await page.setContent(html);
 
-	let pdfData = await page.pdf({ format: "a4" });
+	const pdfData = await page.pdf({ format: "a4" });
 	return pdfData;
 }

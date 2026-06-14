@@ -11,7 +11,7 @@ const cardClassName =
 	"block rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 transition hover:border-sky-300/30 hover:bg-slate-950/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/50 lg:w-[19rem] lg:shrink-0";
 
 export function QueueProgressWidget() {
-	const { data, error, isLoading, mutate } = useSWR<QueueProgressResponse>("/api/queue-info", fetcher, {
+	const { data, error, isLoading } = useSWR<QueueProgressResponse>("/api/queue-info", fetcher, {
 		refreshInterval: 10_000,
 		revalidateOnFocus: false,
 	});

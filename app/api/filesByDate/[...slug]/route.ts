@@ -13,7 +13,7 @@ import {
 import { formatDayKey, getFilesWithOptionalDates, parseDayKey } from "../../../../lib/media/files";
 import type { StoredDirectoryMetaEntry } from "../../../../lib/media/files-types";
 import { getImageDimensions } from "../../../../lib/media/thumb-store";
-import type { DatedFileEntry, FileEntryWithOptionalDate } from "../../../../lib/media/files-types";
+import type { FileEntryWithOptionalDate } from "../../../../lib/media/files-types";
 
 const UNDATED_BUCKET = "undated";
 

@@ -274,7 +274,9 @@ function getFaceRegistryKeys(section: ConfigSection): string[] {
 }
 
 function stripStoredFaceFields(metaEntry: StoredDirectoryMetaEntry): StoredDirectoryMetaEntry {
-	const { faces: _faces, personNames: _personNames, ...rest } = metaEntry;
+	const rest = { ...metaEntry };
+	delete (rest as Record<string, unknown>).faces;
+	delete (rest as Record<string, unknown>).personNames;
 	return rest as StoredDirectoryMetaEntry;
 }
 

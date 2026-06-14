@@ -12,7 +12,7 @@ import {
 	writeStoredMetaForFile,
 } from "../lib/media/file-meta.ts";
 import { isHiddenPathSegment, joinSectionPath } from "../lib/media/files.ts";
-import { getSectionById, getSectionIndex } from "../lib/api/api-route.ts";
+import { getSectionById } from "../lib/api/api-route.ts";
 import {
 	closeThumbKvClient,
 	isVideoPath,

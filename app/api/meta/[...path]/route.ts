@@ -23,7 +23,6 @@ import type { StoredDirectoryMetaEntry } from "../../../../lib/media/files-types
 import {
 	serializeSectionForWorker,
 	thumbJobActions,
-	type ThumbImageMetaData,
 } from "../../../../lib/media/thumb-jobs";
 import { getMediaKind } from "../../../../lib/media/thumb-store";
 import { ThumbQueue } from "../../../../lib/media/thumb-queue";

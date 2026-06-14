@@ -4,7 +4,7 @@ export function getFormDataNew(form) {
 }
 
 export function getFormData(form) {
-	let elements = Array.from(form.elements).filter((x) => !x.disabled);
+	const elements = Array.from(form.elements).filter((x) => !x.disabled);
 	// elements = elements.filter((x) => (["radio", "checkbox"].includes(x.type) ? x.checked : x.value));
 	let entries = elements.map((x) => {
 		console.log(x.name, x.type);

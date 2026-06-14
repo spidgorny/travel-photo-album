@@ -74,7 +74,7 @@ export function useFetcher(url, fetcher, options) {
 
 export function buildURL(pathname, params = {}) {
   const u = new URL(pathname, document.location.href);
-  for (let key in params) {
+ 	for (const key in params) {
     u.searchParams.set(key, params[key]);
   }
   return u.toString();
@@ -82,7 +82,7 @@ export function buildURL(pathname, params = {}) {
 
 export function build_query(params) {
   const p = new URLSearchParams();
-  for (let key in params) {
+ 	for (const key in params) {
     p.set(key, params[key]);
   }
   return p.toString();

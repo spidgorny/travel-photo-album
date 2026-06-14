@@ -22,7 +22,7 @@ import path from "path";
 import mime from "mime-types";
 import process from "process";
 import invariant from "tiny-invariant";
-import config, { resolveSection } from "../lib/config/config.ts";
+import config from "../lib/config/config.ts";
 import { getSectionById, getSectionIndex } from "../lib/api/api-route.ts";
 import {
 	getThumbKvClient,
@@ -30,7 +30,6 @@ import {
 	thumbnailTargetWidth,
 	videoThumbnailFrameCount,
 } from "../lib/media/thumb-store.ts";
-import { getFilteredFiles } from "../lib/media/files.ts";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -103,7 +102,6 @@ async function walkFiles(sectionPath: string, relPath: string[] = []): Promise<s
 			const children = await walkFiles(sectionPath, childRel);
 			results.push(...children);
 		} else if (entry.isFile()) {
-			const ext = path.extname(entry.name).toLowerCase();
 			const mimeType = mime.lookup(entry.name);
 			if (mimeType && (mimeType.startsWith("image/") || mimeType.startsWith("video/"))) {
 				results.push(childRel);
@@ -124,7 +122,7 @@ async function main() {
 	let totalCopied = 0;
 	let totalSkipped = 0;
 	let totalMissing = 0;
-	let totalDeleted = 0;
+	const totalDeleted = 0;
 
 	for (const section of sections) {
 		const sectionIndex = getSectionIndex(config.sections, section);

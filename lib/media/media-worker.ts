@@ -18,7 +18,6 @@ import {
 	normalizeStoredPhash,
 } from "../media/file-meta.ts";
 import { hasHiddenPathSegment, joinSectionPath } from "../media/files.ts";
-import { isAutoDescriptionEnabled } from "../media/image-description.ts";
 import { upsertSearchEntryFromStoredMeta } from "../search/search-index.ts";
 import {
 thumbJobActions,

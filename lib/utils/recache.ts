@@ -4,7 +4,7 @@ import fs from "fs";
 import recache from "recache";
 
 export async function initRecache(cachePath) {
-	let cacheFile = "/tmp/" + slugify(cachePath).replace(":", "-") + ".json";
+	const cacheFile = "/tmp/" + slugify(cachePath).replace(":", "-") + ".json";
 
 	if (fs.existsSync(cacheFile)) {
 		const data = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
@@ -35,7 +35,7 @@ export async function initRecache(cachePath) {
 			(cache) => {
 				console.log();
 				console.log("Cache ready!", cacheFile);
-				let jsonData = JSON.stringify(
+				const jsonData = JSON.stringify(
 					Array.from(cache._container.entries()),
 					(key, value) =>
 						typeof value === "bigint" ? value.toString() : value, // return everything else unchanged

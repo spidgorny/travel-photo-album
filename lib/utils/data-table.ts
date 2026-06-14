@@ -1,6 +1,6 @@
 // @ts-nocheck
 export function convertColumnsForDataTable(cols, dataRow = null) {
-	let columns = Object.entries(cols).map(([x, nameid]) => {
+	const columns = Object.entries(cols).map(([x, nameid]) => {
 		if (typeof nameid === "object") {
 			return nameid;
 		}

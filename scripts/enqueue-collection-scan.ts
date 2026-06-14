@@ -1,7 +1,6 @@
 // @ts-nocheck
 import "../lib/system/load-env.ts";
 import fs from "fs/promises";
-import mime from "mime-types";
 import process from "process";
 import invariant from "tiny-invariant";
 import { closeRedisClient } from "../lib/system/cache.ts";

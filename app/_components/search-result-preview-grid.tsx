@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { PhotoLightbox } from "./photo-lightbox";
 import type { GalleryPhoto } from "./ui-types";
 import { buildApiPath } from "./url-paths";
@@ -53,12 +54,15 @@ export function SearchResultPreviewGrid({
 						}}
 						className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60 transition hover:border-sky-300/30"
 					>
-						<img
-							src={photo.source.thumbnail}
-							alt={photo.caption ?? "Photo"}
-							className="aspect-[4/3] h-full w-full object-cover"
-							loading="lazy"
-						/>
+ 					<Image
+ 						src={photo.source.thumbnail}
+ 						alt={photo.caption ?? "Photo"}
+ 						className="aspect-[4/3] h-full w-full object-cover"
+ 						loading="lazy"
+ 						width={photo.width}
+ 						height={photo.height}
+ 						unoptimized
+ 					/>
 					</button>
 				))}
 			</div>

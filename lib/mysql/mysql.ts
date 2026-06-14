@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { MysqlConnector } from "./mysql-connector";
 
-let anyDB = {};
+const anyDB = {};
 
 export function getAnyCoreLinuxDB(dbName) {
   if (!dbName) {

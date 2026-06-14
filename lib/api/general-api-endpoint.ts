@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { requiresAuth } from "../api/auth-check";
-import { MysqlTable } from "../mysql/mysql-table";
 import invariant from "tiny-invariant";
 
 export async function methodHandler(req, res, methodMap) {
@@ -14,7 +13,7 @@ export async function methodHandler(req, res, methodMap) {
     if (req?.query?.__method) {
       method = req.query.__method;
     }
-    let actionFunction = methodMap[method];
+   	const actionFunction = methodMap[method];
     invariant(actionFunction, `no handler for [${method}]`);
     const json = await actionFunction(req, res);
     res.status(200).json({

@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type WheelEvent } from "react";
+import Image from "next/image";
 import { PhashBitmap } from "./phash-bitmap";
 import type { GalleryPhoto, MetaResponse } from "./ui-types";
 import { ErrorState } from "./widget/loading";
@@ -539,7 +540,7 @@ function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
 					/>
 				</div>
 			) : null}
-			<img
+			<Image
 				src={fallbackSrc}
 				alt={photo.title ?? photo.caption}
 				onLoad={() => {
@@ -554,9 +555,12 @@ function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
 					"h-full w-full object-contain transition duration-300",
 					originalStatus === "loaded" ? "opacity-0" : "opacity-100",
 				].join(" ")}
+				fill
+				sizes="100vw"
+				unoptimized
 			/>
 			{shouldLoadOriginal ? (
-				<img
+				<Image
 					src={photo.source.regular}
 					alt={photo.title ?? photo.caption}
 					onLoad={() => setOriginalStatus("loaded")}
@@ -565,6 +569,9 @@ function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
 						"absolute inset-0 h-full w-full object-contain transition duration-300",
 						originalStatus === "loaded" ? "opacity-100" : "opacity-0",
 					].join(" ")}
+					fill
+					sizes="100vw"
+					unoptimized
 				/>
 			) : null}
 			{!previewLoaded && !shouldLoadOriginal ? (
