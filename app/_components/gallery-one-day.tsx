@@ -60,6 +60,9 @@ export function GalleryOneDay({ sectionName, folder, date }: GalleryOneDayProps)
 	const [currentImage, setCurrentImage] = useState(0);
 	const [viewerIsOpen, setViewerIsOpen] = useState(false);
 	const [lightboxPhotoKeys, setLightboxPhotoKeys] = useState<string[]>([]);
+	const [photoOverrides, setPhotoOverrides] = useState<
+		Record<string, Pick<GalleryPhoto, "description" | "phash">>
+	>({});
 
 	const closeLightbox = useCallback(() => {
 		setCurrentImage(0);
@@ -103,7 +106,14 @@ export function GalleryOneDay({ sectionName, folder, date }: GalleryOneDayProps)
 		});
 	}, [data, folder, sectionName]);
 
-	const [dimensions, setDimensions] = useState<GalleryPhoto[]>(photos);
+	const dimensions = useMemo<GalleryPhoto[]>(
+		() =>
+			photos.map((photo) => ({
+				...photo,
+				...(photoOverrides[photo.key] ?? {}),
+			})),
+		[photoOverrides, photos],
+	);
 	const groupedPhotos = useMemo(() => groupSimilarPhotosForDay(dimensions), [dimensions]);
 	const lightboxPhotos = useMemo(() => {
 		if (!lightboxPhotoKeys.length) {
@@ -145,9 +155,13 @@ export function GalleryOneDay({ sectionName, folder, date }: GalleryOneDayProps)
 	);
 
 	const updatePhotoDescription = useCallback((photoKey: string, description?: string) => {
-		setDimensions((items) =>
-			items.map((item) => (item.key === photoKey ? { ...item, description } : item)),
-		);
+		setPhotoOverrides((current) => ({
+			...current,
+			[photoKey]: {
+				...(current[photoKey] ?? {}),
+				description,
+			},
+		}));
 	}, []);
 
 	const showPreviousImage = useCallback(() => {
@@ -157,10 +171,6 @@ export function GalleryOneDay({ sectionName, folder, date }: GalleryOneDayProps)
 	const showNextImage = useCallback(() => {
 		setCurrentImage((index) => (index < lightboxPhotos.length - 1 ? index + 1 : index));
 	}, [lightboxPhotos.length]);
-
-	useEffect(() => {
-		setDimensions(photos);
-	}, [photos]);
 
 	const currentPhoto = lightboxPhotos[currentImage] ?? null;
 	const currentMetaUrl =
@@ -193,9 +203,13 @@ export function GalleryOneDay({ sectionName, folder, date }: GalleryOneDayProps)
 		if (!currentPhoto || currentMetaPhash === currentPhoto.phash) {
 			return;
 		}
-		setDimensions((items) =>
-			items.map((item) => (item.key === currentPhoto.key ? { ...item, phash: currentMetaPhash } : item)),
-		);
+		setPhotoOverrides((current) => ({
+			...current,
+			[currentPhoto.key]: {
+				...(current[currentPhoto.key] ?? {}),
+				phash: currentMetaPhash,
+			},
+		}));
 	}, [currentMetaPhash, currentPhoto]);
 
 	const imageRenderer = (props: ImageRendererProps) => {

@@ -5,6 +5,8 @@ ENV NODE_ENV=development
 
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
+RUN yarn run typecheck
+RUN yarn run lint
 
 COPY . .
 

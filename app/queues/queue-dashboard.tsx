@@ -101,7 +101,7 @@ export function QueueDashboard({
 
 	return (
 		<div className="relative overflow-hidden">
-			<div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.18),_transparent_55%)]" />
+			<div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.18),transparent_55%)]" />
 			<main className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-5 px-4 py-5 lg:px-6 xl:px-8">
 				<AppHeader
 					sections={sections}

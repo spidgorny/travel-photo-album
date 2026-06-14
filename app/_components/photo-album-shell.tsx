@@ -67,7 +67,7 @@ function SectionPicker({ sections }: { sections: UISection[] }) {
 					<Link
 						key={s.id}
 						href={buildHomeHref(s.name)}
-						className="group flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-sky-400/30 hover:bg-sky-400/5"
+						className="group flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/3 p-5 transition hover:border-sky-400/30 hover:bg-sky-400/5"
 					>
 						<div className="flex items-center gap-3">
 							<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950/70 text-xs font-bold text-sky-300 group-hover:border-sky-300/30">

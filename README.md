@@ -358,7 +358,7 @@ npm run typecheck
 npm run build
 ```
 
-`npm run lint` is currently stale because the repo still points to `next lint`, which is no longer provided by Next.js 16, and the ESLint config has not yet been migrated to the flat config format required by ESLint 10.
+`npm run lint` runs `eslint .` (Next.js 16 no longer provides `next lint`).
 
 ## Repository layout
 
