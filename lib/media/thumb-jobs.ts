@@ -1,6 +1,6 @@
 import type { FfprobeData } from "fluent-ffmpeg";
-import type { ConfigSection } from "./config.ts";
-import type { StoredDirectoryMetaEntry } from "./files-types.ts";
+import type { ConfigSection } from "../config/config.ts";
+import type { StoredDirectoryMetaEntry } from "../media/files-types.ts";
 
 export const thumbQueueUrl =
 	process.env.THUMB_QUEUE_URL?.trim() ||

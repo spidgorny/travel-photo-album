@@ -2,12 +2,12 @@ import fs from "fs";
 import { Readable } from "stream";
 import mime from "mime-types";
 import invariant from "tiny-invariant";
-import config, { type ConfigSection } from "../../../../lib/config";
+import config, { type ConfigSection } from "../../../../lib/config/config";
 import {
 	getSectionById,
 	jsonError,
-} from "../../../../lib/api-route";
-import { joinSectionPath } from "../../../../lib/files";
+} from "../../../../lib/api/api-route";
+import { joinSectionPath } from "../../../../lib/media/files";
 
 interface PhotoErrorResponse {
 	sectionId?: string;

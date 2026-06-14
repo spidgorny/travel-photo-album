@@ -1,12 +1,12 @@
 import type { Queue } from "bullmq";
-import { getDescriptionQueue } from "./description-queue";
+import { getDescriptionQueue } from "../media/description-queue";
 import {
 	descriptionQueueName,
 	descriptionQueuePrefix,
 	descriptionQueueUrl,
-} from "./description-jobs";
-import { getThumbQueue } from "./thumb-queue";
-import { thumbQueueName, thumbQueuePrefix, thumbQueueUrl } from "./thumb-jobs";
+} from "../media/description-jobs";
+import { getThumbQueue } from "../media/thumb-queue";
+import { thumbQueueName, thumbQueuePrefix, thumbQueueUrl } from "../media/thumb-jobs";
 
 const queueCountTypes = [
 	"waiting",

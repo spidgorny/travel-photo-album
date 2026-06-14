@@ -2,14 +2,14 @@ import sizeOf from "image-size";
 import FfmpegCommand, { type FfprobeData } from "fluent-ffmpeg";
 import { NextResponse } from "next/server";
 import invariant from "tiny-invariant";
-import config, { type ConfigSection } from "../../../../lib/config";
+import config, { type ConfigSection } from "../../../../lib/config/config";
 import {
 	getSectionById,
 	getSectionIndex,
 	jsonError,
 	toError,
-} from "../../../../lib/api-route";
-import { joinSectionPath } from "../../../../lib/files";
+} from "../../../../lib/api/api-route";
+import { joinSectionPath } from "../../../../lib/media/files";
 import {
 	getStoredMetaDirectoryKeys,
 	buildBasicFileMetaData,
@@ -18,15 +18,15 @@ import {
 	normalizeStoredPhash,
 	readStoredMetaForFile,
 	updateStoredDescriptionForFile,
-} from "../../../../lib/file-meta";
-import type { StoredDirectoryMetaEntry } from "../../../../lib/files-types";
+} from "../../../../lib/media/file-meta";
+import type { StoredDirectoryMetaEntry } from "../../../../lib/media/files-types";
 import {
 	serializeSectionForWorker,
 	thumbJobActions,
 	type ThumbImageMetaData,
-} from "../../../../lib/thumb-jobs";
-import { getMediaKind } from "../../../../lib/thumb-store";
-import { ThumbQueue } from "../../../../lib/thumb-queue";
+} from "../../../../lib/media/thumb-jobs";
+import { getMediaKind } from "../../../../lib/media/thumb-store";
+import { ThumbQueue } from "../../../../lib/media/thumb-queue";
 
 interface MetaComputedDimensions {
 	Width?: number;

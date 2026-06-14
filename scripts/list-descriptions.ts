@@ -1,20 +1,20 @@
 // @ts-nocheck
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import fs from "fs/promises";
 import process from "process";
 import invariant from "tiny-invariant";
-import { closeRedisClient } from "../lib/cache.ts";
-import config from "../lib/config.ts";
+import { closeRedisClient } from "../lib/system/cache.ts";
+import config from "../lib/config/config.ts";
 import {
 	closeThumbKvClient,
 	isVideoPath,
-} from "../lib/thumb-store.ts";
+} from "../lib/media/thumb-store.ts";
 import {
 	getStoredMetaDirectoryKey,
 	normalizeStoredDescription,
 	readStoredMetaDirectory,
-} from "../lib/file-meta.ts";
-import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
+} from "../lib/media/file-meta.ts";
+import { isHiddenPathSegment, joinSectionPath } from "../lib/media/files.ts";
 
 async function main() {
 	const { collectionInput } = parseArgs(process.argv.slice(2));

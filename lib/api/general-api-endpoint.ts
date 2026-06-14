@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { requiresAuth } from "./auth-check";
-import { MysqlTable } from "./mysql/mysql-table";
+import { requiresAuth } from "../api/auth-check";
+import { MysqlTable } from "../mysql/mysql-table";
 import invariant from "tiny-invariant";
 
 export async function methodHandler(req, res, methodMap) {

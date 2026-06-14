@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import config from "../../lib/config";
-import { getQueueInfo } from "../../lib/queue-info";
+import config from "../../lib/config/config";
+import { getQueueInfo } from "../../lib/system/queue-info";
 import type { QueueProgressResponse, UISection } from "../_components/ui-types";
 import { QueueDashboard } from "./queue-dashboard";
 

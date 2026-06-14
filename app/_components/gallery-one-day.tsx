@@ -4,7 +4,7 @@ import type { CSSProperties, ComponentType, MouseEvent, ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Gallery from "react-photo-gallery";
 import useSWR from "swr";
-import { fetcher } from "../../lib/http";
+import { fetcher } from "../../lib/api/http";
 import { PhashBitmap } from "./phash-bitmap";
 import { MetadataSidebar, PhotoLightbox } from "./photo-lightbox";
 import type { FilesResponse, GalleryPhoto, MetaResponse } from "./ui-types";

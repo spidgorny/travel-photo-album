@@ -1,4 +1,4 @@
-import type { ConfigSection } from "./config";
+import type { ConfigSection } from "../config/config";
 
 export type CatchAllQueryValue = string | string[] | undefined | null;
 

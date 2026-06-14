@@ -3,16 +3,16 @@ import path from "path";
 import readdir from "@jsdevtools/readdir-enhanced";
 import fs from "fs";
 import invariant from "tiny-invariant";
-import type { ConfigSection } from "./config.ts";
+import type { ConfigSection } from "../config/config.ts";
 import type {
 	DatedFileEntry,
 	FileEntryWithOptionalDate,
 	FilteredFileEntry,
-} from "./files-types.ts";
+} from "../media/files-types.ts";
 import {
 	readStoredFolderListing,
 	storeFolderListing,
-} from "./folder-store.ts";
+} from "../media/folder-store.ts";
 
 export function joinSectionPath(
 	sectionPath: string,

@@ -1,14 +1,14 @@
 import { DateTime } from "luxon";
 import { NextResponse } from "next/server";
 import invariant from "tiny-invariant";
-import config, { type ConfigSection } from "../../../../lib/config";
+import config, { type ConfigSection } from "../../../../lib/config/config";
 import {
 	getSectionById,
 	getSectionIndex,
 	jsonError,
-} from "../../../../lib/api-route";
-import type { FilteredFileEntry } from "../../../../lib/files-types";
-import { getFilteredFiles } from "../../../../lib/files";
+} from "../../../../lib/api/api-route";
+import type { FilteredFileEntry } from "../../../../lib/media/files-types";
+import { getFilteredFiles } from "../../../../lib/media/files";
 
 interface FilesSuccessResponse {
 	sectionInput?: string;

@@ -1,27 +1,27 @@
 import { DateTime } from "luxon";
 import { NextResponse } from "next/server";
 import invariant from "tiny-invariant";
-import config from "../../../../lib/config";
+import config from "../../../../lib/config/config";
 import {
 	getSectionById,
 	getSectionIndex,
 	jsonError,
-} from "../../../../lib/api-route";
+} from "../../../../lib/api/api-route";
 import {
 	getStoredMetaDirectoryKey,
 	readStoredMetaDirectory,
-} from "../../../../lib/file-meta";
+} from "../../../../lib/media/file-meta";
 import type {
 	DailyLocationSummary,
 	DatedFileEntry,
 	FileEntryWithOptionalDate,
 	StoredDirectoryMetaEntry,
-} from "../../../../lib/files-types";
-import { formatDayKey, getFilesWithOptionalDates } from "../../../../lib/files";
+} from "../../../../lib/media/files-types";
+import { formatDayKey, getFilesWithOptionalDates } from "../../../../lib/media/files";
 import {
 	filterFilesBySearchQuery,
 	normalizeSearchQuery,
-} from "../../../../lib/search";
+} from "../../../../lib/search/search";
 
 interface DatesSuccessResponse {
 	sectionId: number;

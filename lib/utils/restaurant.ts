@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { getAnyCoreLinuxDB } from "./mysql/mysql";
+import { getAnyCoreLinuxDB } from "../mysql/mysql";
 
 export function getRestaurantId() {
   return 1; // @todo get from user session

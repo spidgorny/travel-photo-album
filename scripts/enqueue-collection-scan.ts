@@ -1,41 +1,41 @@
 // @ts-nocheck
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import fs from "fs/promises";
 import mime from "mime-types";
 import process from "process";
 import invariant from "tiny-invariant";
-import { closeRedisClient } from "../lib/cache.ts";
-import config from "../lib/config.ts";
+import { closeRedisClient } from "../lib/system/cache.ts";
+import config from "../lib/config/config.ts";
 import {
 	closeDescriptionQueue,
 	validateDescriptionQueueConnection,
-} from "../lib/description-queue.ts";
+} from "../lib/media/description-queue.ts";
 import {
 	descriptionJobActions,
 	isDescriptionQueueConfigured,
-} from "../lib/description-jobs.ts";
-import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
-import { storeFolderListing } from "../lib/folder-store.ts";
-import { getSectionById, getSectionIndex } from "../lib/api-route.ts";
+} from "../lib/media/description-jobs.ts";
+import { isHiddenPathSegment, joinSectionPath } from "../lib/media/files.ts";
+import { storeFolderListing } from "../lib/media/folder-store.ts";
+import { getSectionById, getSectionIndex } from "../lib/api/api-route.ts";
 import {
 hasExifOrientationTransform,
 normalizeStoredDescription,
 readStoredMetaForFile,
-} from "../lib/file-meta.ts";
+} from "../lib/media/file-meta.ts";
 import {
 buildMediaJobId,
 createMediaQueue,
 getEnsureSectionThumbVariant,
 mediaJobNames,
-} from "../lib/media-worker.ts";
-import { serializeSectionForWorker } from "../lib/thumb-jobs.ts";
-import { validateBullMqConnection } from "../lib/thumb-queue.ts";
+} from "../lib/media/media-worker.ts";
+import { serializeSectionForWorker } from "../lib/media/thumb-jobs.ts";
+import { validateBullMqConnection } from "../lib/media/thumb-queue.ts";
 import {
 	closeThumbKvClient,
 	hasStoredSectionThumb,
 	isSupportedMediaPath,
 	isVideoPath,
-} from "../lib/thumb-store.ts";
+} from "../lib/media/thumb-store.ts";
 
 const batchSize = 250;
 

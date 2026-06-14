@@ -5,7 +5,7 @@ import {
 	thumbQueuePrefix,
 	thumbQueueUrl,
 	type ThumbJobData,
-} from "./thumb-jobs.ts";
+} from "../media/thumb-jobs.ts";
 
 let thumbQueue: Queue | null = null;
 let thumbQueueWarningWasShown = false;

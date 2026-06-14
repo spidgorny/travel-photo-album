@@ -1,44 +1,44 @@
 // @ts-nocheck
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import fs from "fs/promises";
 import mime from "mime-types";
 import process from "process";
 import invariant from "tiny-invariant";
-import config from "../lib/config.ts";
-import { closeRedisClient } from "../lib/cache.ts";
+import config from "../lib/config/config.ts";
+import { closeRedisClient } from "../lib/system/cache.ts";
 import {
 	closeDescriptionQueue,
 	DescriptionQueue,
 	validateDescriptionQueueConnection,
-} from "../lib/description-queue.ts";
+} from "../lib/media/description-queue.ts";
 import {
 	descriptionJobActions,
 	isDescriptionQueueConfigured,
-} from "../lib/description-jobs.ts";
-import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
-import { storeFolderListing } from "../lib/folder-store.ts";
-import { getSectionById, getSectionIndex } from "../lib/api-route.ts";
+} from "../lib/media/description-jobs.ts";
+import { isHiddenPathSegment, joinSectionPath } from "../lib/media/files.ts";
+import { storeFolderListing } from "../lib/media/folder-store.ts";
+import { getSectionById, getSectionIndex } from "../lib/api/api-route.ts";
 import {
 	serializeSectionForWorker,
 	thumbJobActions,
-} from "../lib/thumb-jobs.ts";
+} from "../lib/media/thumb-jobs.ts";
 import {
 	closeThumbQueue,
 	ThumbQueue,
 	validateThumbQueueConnection,
-} from "../lib/thumb-queue.ts";
+} from "../lib/media/thumb-queue.ts";
 import {
 	hasExifOrientationTransform,
 	normalizeStoredDescription,
 	readStoredMetaForFile,
-} from "../lib/file-meta.ts";
+} from "../lib/media/file-meta.ts";
 import {
 	closeThumbKvClient,
 	hasStoredSectionThumb,
 	isSupportedMediaPath,
 	isVideoPath,
 	thumbnailTargetWidth,
-} from "../lib/thumb-store.ts";
+} from "../lib/media/thumb-store.ts";
 
 const ANSI_RED = "\u001b[31m";
 const ANSI_RESET = "\u001b[0m";

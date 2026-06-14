@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { jsonError } from "../../../lib/api-route";
-import { getQueueInfo } from "../../../lib/queue-info";
-import { getThumbStorageInfo } from "../../../lib/storage-info";
+import { jsonError } from "../../../lib/api/api-route";
+import { getQueueInfo } from "../../../lib/system/queue-info";
+import { getThumbStorageInfo } from "../../../lib/system/storage-info";
 
 export const runtime = "nodejs";
 

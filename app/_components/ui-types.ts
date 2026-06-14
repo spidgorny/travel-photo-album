@@ -1,8 +1,8 @@
-import type { ConfigSection } from "../../lib/config";
+import type { ConfigSection } from "../../lib/config/config";
 import type {
 	DailyLocationSummary,
 	FileLocationLabel,
-} from "../../lib/files-types";
+} from "../../lib/media/files-types";
 
 export interface UISection extends ConfigSection {
 	id: number;

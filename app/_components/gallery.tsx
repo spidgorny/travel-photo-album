@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
-import { fetcher } from "../../lib/http";
+import { fetcher } from "../../lib/api/http";
 import { FolderInfoSidebar } from "./folder-info-sidebar";
 import { GalleryOneDay } from "./gallery-one-day";
 import { buildDayAnchorId, createGoogleMapsHref } from "./url-paths";

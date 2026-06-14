@@ -1,22 +1,22 @@
 // @ts-nocheck
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import process from "process";
 import { Queue, Worker } from "bullmq";
-import { closeRedisClient } from "../lib/cache.ts";
+import { closeRedisClient } from "../lib/system/cache.ts";
 import {
 	createDescriptionQueueConnection,
-} from "../lib/description-queue.ts";
+} from "../lib/media/description-queue.ts";
 import {
 	descriptionJobActions,
 	descriptionQueueName,
 	descriptionQueuePrefix,
-} from "../lib/description-jobs.ts";
+} from "../lib/media/description-jobs.ts";
 import {
 	getDescriptionWorkerLockDurationMs,
 	processDescriptionJob,
 	resolveDescriptionJobName,
-} from "../lib/description-worker.ts";
-import { closeThumbKvClient } from "../lib/thumb-store.ts";
+} from "../lib/media/description-worker.ts";
+import { closeThumbKvClient } from "../lib/media/thumb-store.ts";
 
 const connection = createDescriptionQueueConnection();
 if (!connection) {

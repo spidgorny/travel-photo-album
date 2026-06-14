@@ -1,5 +1,5 @@
-import type { ConfigSection } from "./config.ts";
-import { getThumbKvClient, thumbKvPrefix } from "./thumb-store.ts";
+import type { ConfigSection } from "../config/config.ts";
+import { getThumbKvClient, thumbKvPrefix } from "../media/thumb-store.ts";
 
 interface StoredFolderEntry {
 	path: string; // filename (basename)

@@ -1,7 +1,7 @@
 // @ts-nocheck
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import { runTest } from "./bootstrap.ts";
-import { createMediaQueue, processMediaJob, resolveMediaJobName } from "../lib/media-worker.ts";
+import { createMediaQueue, processMediaJob, resolveMediaJobName } from "../lib/media/media-worker.ts";
 
 runTest(async () => {
 	const queue = createMediaQueue();

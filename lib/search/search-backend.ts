@@ -3,7 +3,7 @@ import {
 	searchIndexedLibrary as searchIndexedLibraryFromIndex,
 	type SearchResultGroup,
 	type SearchSection,
-} from "./search-index.ts";
+} from "../search/search-index.ts";
 
 export type { SearchResultGroup, SearchSection };
 

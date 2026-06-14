@@ -1,24 +1,24 @@
 // @ts-nocheck
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import fs from "fs/promises";
 import mime from "mime-types";
 import process from "process";
 import invariant from "tiny-invariant";
-import config from "../lib/config.ts";
+import config from "../lib/config/config.ts";
 import {
 	buildPerceptualHashFromBuffer,
 	normalizeStoredPhash,
 	readStoredMetaForFile,
 	writeStoredMetaForFile,
-} from "../lib/file-meta.ts";
-import { isHiddenPathSegment, joinSectionPath } from "../lib/files.ts";
-import { getSectionById, getSectionIndex } from "../lib/api-route.ts";
+} from "../lib/media/file-meta.ts";
+import { isHiddenPathSegment, joinSectionPath } from "../lib/media/files.ts";
+import { getSectionById, getSectionIndex } from "../lib/api/api-route.ts";
 import {
 	closeThumbKvClient,
 	isVideoPath,
 	readStoredSectionThumb,
 	thumbnailTargetWidth,
-} from "../lib/thumb-store.ts";
+} from "../lib/media/thumb-store.ts";
 
 async function main() {
 	const startedAt = Date.now();

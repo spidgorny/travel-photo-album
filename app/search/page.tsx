@@ -1,5 +1,5 @@
-import config from "../../lib/config";
-import { searchPhotoLibrary } from "../../lib/search";
+import config from "../../lib/config/config";
+import { searchPhotoLibrary } from "../../lib/search/search";
 import { AppHeader } from "../_components/app-header";
 import { SearchResultPreviewGrid } from "../_components/search-result-preview-grid";
 import {

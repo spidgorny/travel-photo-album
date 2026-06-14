@@ -6,27 +6,32 @@
     },
     {
       "name": "p-digital-photo",
+      "dockerPath": "/media/nas/photo/Digital Photo",
       "linuxPath": "/media/nas/photo/Digital Photo",
       "winPath": "P:/Digital Photo",
       "thumbPath": "./data/Digital_Photo"
     },
     {
       "name": "marina-1-5t-2022-04",
+      "dockerPath": "/media/nas/photo/Photos/2022/Marina-5t/2022-04",
       "linuxPath": "/media/nas/photo/Photos/2022/Marina-5t/2022-04",
       "thumbPath": "./data/synology-photos/2022/Marina-5t/2022-04"
     },
     {
       "name": "p-photos",
+      "dockerPath": "/media/nas/photo/Photos",
       "linuxPath": "/media/nas/photo/Photos",
       "thumbPath": "./data/synology-photos"
     },
     {
       "name": "dji-drone",
+      "dockerPath": "/media/nas/photo/Photos/2022/DJI",
       "linuxPath": "/media/nas/photo/Photos/2022/DJI",
       "from": "DJI_0166.MP4"
     },
     {
       "name": "volumes-photo-new",
+      "dockerPath": "/media/nas/photo/new",
       "linuxPath": "/media/nas/photo/new",
       "macPath": "/Volumes/photo/new"
     }

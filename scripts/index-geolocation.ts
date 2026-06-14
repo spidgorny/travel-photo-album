@@ -1,16 +1,16 @@
 // @ts-nocheck
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import process from "process";
-import { closeRedisClient } from "../lib/cache.ts";
+import { closeRedisClient } from "../lib/system/cache.ts";
 import {
 	closeThumbKvClient,
 	getThumbKvClient,
 	thumbKvPrefix,
-} from "../lib/thumb-store.ts";
+} from "../lib/media/thumb-store.ts";
 import {
 	geocodeGpsCoordinates,
 	normalizeStoredGps,
-} from "../lib/file-meta.ts";
+} from "../lib/media/file-meta.ts";
 
 async function main() {
 	const { force } = parseArgs(process.argv.slice(2));

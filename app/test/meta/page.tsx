@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { fetcher } from "../../../lib/http";
+import { fetcher } from "../../../lib/api/http";
 import { ErrorState, Loading, getErrorMessage } from "../../_components/widget/loading";
 
 export default function TestMetaPage() {

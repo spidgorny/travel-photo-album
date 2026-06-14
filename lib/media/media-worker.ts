@@ -3,12 +3,12 @@ import crypto from "crypto";
 import fs from "fs";
 import { Queue } from "bullmq";
 import invariant from "tiny-invariant";
-import config, { resolveSection as normalizeConfigSection } from "./config.ts";
-import { DescriptionQueue } from "./description-queue.ts";
+import config, { resolveSection as normalizeConfigSection } from "../config/config.ts";
+import { DescriptionQueue } from "../media/description-queue.ts";
 import {
 	descriptionJobActions,
 	isDescriptionQueueConfigured,
-} from "./description-jobs.ts";
+} from "../media/description-jobs.ts";
 import {
 	buildImageMetaData,
 	getStoredMetaDate,
@@ -16,16 +16,16 @@ import {
 	readStoredMetaForFile,
 	writeStoredMetaForFile,
 	normalizeStoredPhash,
-} from "./file-meta.ts";
-import { hasHiddenPathSegment, joinSectionPath } from "./files.ts";
-import { isAutoDescriptionEnabled } from "./image-description.ts";
-import { upsertSearchEntryFromStoredMeta } from "./search-index.ts";
+} from "../media/file-meta.ts";
+import { hasHiddenPathSegment, joinSectionPath } from "../media/files.ts";
+import { isAutoDescriptionEnabled } from "../media/image-description.ts";
+import { upsertSearchEntryFromStoredMeta } from "../search/search-index.ts";
 import {
 thumbJobActions,
 thumbQueueName,
 thumbQueuePrefix,
 thumbQueueUrl,
-} from "./thumb-jobs.ts";
+} from "../media/thumb-jobs.ts";
 import {
 buildGeneratedImageThumb,
 ensureSectionThumb,
@@ -35,7 +35,7 @@ isVideoPath,
 persistGeneratedImageThumb,
 readStoredSectionThumb,
 thumbnailTargetWidth,
-} from "./thumb-store.ts";
+} from "../media/thumb-store.ts";
 
 const defaultWorkerConcurrency = 2;
 const defaultWorkerLockDurationMs = 10 * 60 * 1000;
@@ -172,6 +172,7 @@ const keys = new Set();
 for (const candidate of [
 section?.name,
 section?.path,
+section?.dockerPath,
 section?.macPath,
 section?.linuxPath,
 section?.winPath,

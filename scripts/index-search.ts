@@ -1,5 +1,5 @@
-import "../lib/load-env.ts";
-import config from "../lib/config.ts";
+import "../lib/system/load-env.ts";
+import config from "../lib/config/config.ts";
 import {
 	closeSearchIndex,
 	countSearchEntries,
@@ -7,9 +7,9 @@ import {
 	rebuildSearchIndex,
 	type RebuildSearchIndexProgress,
 	type SearchSection,
-} from "../lib/search-index.ts";
-import { closeThumbKvClient } from "../lib/thumb-store.ts";
-import { closeRedisClient } from "../lib/cache.ts";
+} from "../lib/search/search-index.ts";
+import { closeThumbKvClient } from "../lib/media/thumb-store.ts";
+import { closeRedisClient } from "../lib/system/cache.ts";
 
 const sections = (Array.isArray(config.sections) ? config.sections : []).map((section, index) => ({
 	...section,

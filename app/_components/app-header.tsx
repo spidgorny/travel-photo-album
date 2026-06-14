@@ -1,5 +1,5 @@
 import React from 'react';
-import { UISection } from '../../types/ui-vendor';
+import type { UISection } from "./ui-types";
 
 interface AppHeaderProps {
 	sections: UISection[];
@@ -10,7 +10,7 @@ interface AppHeaderProps {
 	initialSearchQuery?: string;
 }
 
-const AppHeader: React.FC<AppHeaderProps> = ({ sections, activeSectionId, activeFolder, contextLabel, contextValue, initialSearchQuery }) => {
+export const AppHeader: React.FC<AppHeaderProps> = ({ sections, activeSectionId, activeFolder, contextLabel, contextValue, initialSearchQuery }) => {
 	return (
 		<header>
 			<h1>Hey</h1>
@@ -29,4 +29,3 @@ const AppHeader: React.FC<AppHeaderProps> = ({ sections, activeSectionId, active
 	);
 };
 
-export default AppHeader;

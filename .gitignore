@@ -37,3 +37,4 @@ kvrocks/
 redis/
 queue/
 *.tsbuildinfo
+.aider*

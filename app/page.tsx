@@ -1,5 +1,4 @@
 import React from 'react';
-import { HomePageProps } from '../../types/ui-vendor';
 
 interface HomePageProps {
 	searchParams?: Promise<Record<string, string | string[] | undefined>>;

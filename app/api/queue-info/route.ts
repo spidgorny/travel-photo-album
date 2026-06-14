@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { jsonError } from "../../../lib/api-route";
-import { getQueueInfo } from "../../../lib/queue-info";
+import { jsonError } from "../../../lib/api/api-route";
+import { getQueueInfo } from "../../../lib/system/queue-info";
 
 export const runtime = "nodejs";
 

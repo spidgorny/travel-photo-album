@@ -5,7 +5,7 @@ import {
 	descriptionQueuePrefix,
 	descriptionQueueUrl,
 	type DescriptionJobData,
-} from "./description-jobs.ts";
+} from "../media/description-jobs.ts";
 
 let descriptionQueue: Queue | null = null;
 let descriptionQueueWarningWasShown = false;

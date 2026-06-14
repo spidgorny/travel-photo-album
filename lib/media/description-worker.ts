@@ -1,22 +1,22 @@
 // @ts-nocheck
 import invariant from "tiny-invariant";
-import { descriptionJobActions } from "./description-jobs.ts";
+import { descriptionJobActions } from "../media/description-jobs.ts";
 import {
 	buildImageMetaData,
 	getStoredMetaDate,
 	normalizeStoredDescription,
 	readStoredMetaForFile,
 	writeStoredMetaForFile,
-} from "./file-meta.ts";
-import { isAutoDescriptionEnabled, maybeGenerateImageDescription } from "./image-description.ts";
-import { hasHiddenPathSegment, joinSectionPath } from "./files.ts";
+} from "../media/file-meta.ts";
+import { isAutoDescriptionEnabled, maybeGenerateImageDescription } from "../media/image-description.ts";
+import { hasHiddenPathSegment, joinSectionPath } from "../media/files.ts";
 import {
 	getEnsureSectionThumbVariant,
 	normalizeFilePath,
 	resolveSection,
-} from "./media-worker.ts";
-import { upsertSearchEntryFromStoredMeta } from "./search-index.ts";
-import { ensureSectionThumb, getMediaKind, isVideoPath } from "./thumb-store.ts";
+} from "../media/media-worker.ts";
+import { upsertSearchEntryFromStoredMeta } from "../search/search-index.ts";
+import { ensureSectionThumb, getMediaKind, isVideoPath } from "../media/thumb-store.ts";
 
 export const descriptionWorkerJobNames = {
 	generateImageDescription: descriptionJobActions.generateImageDescription,

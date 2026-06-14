@@ -36,3 +36,5 @@ declare module "react-photo-gallery" {
 	const Gallery: ComponentType<GalleryProps>;
 	export default Gallery;
 }
+
+export interface UISection { id: number; name: string; path: string; }

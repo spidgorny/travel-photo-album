@@ -2,31 +2,31 @@ import crypto from "crypto";
 import fs from "fs";
 import { Readable } from "stream";
 import invariant from "tiny-invariant";
-import config from "../../../../lib/config";
-import { DescriptionQueue } from "../../../../lib/description-queue";
+import config from "../../../../lib/config/config";
+import { DescriptionQueue } from "../../../../lib/media/description-queue";
 import {
 	descriptionJobActions,
 	isDescriptionQueueConfigured,
-} from "../../../../lib/description-jobs";
+} from "../../../../lib/media/description-jobs";
 import {
 	normalizeStoredDescription,
 	readStoredMetaForFile,
-} from "../../../../lib/file-meta";
+} from "../../../../lib/media/file-meta";
 import {
 	serializeSectionForWorker,
 	thumbJobActions,
-} from "../../../../lib/thumb-jobs";
-import { ThumbQueue } from "../../../../lib/thumb-queue";
+} from "../../../../lib/media/thumb-jobs";
+import { ThumbQueue } from "../../../../lib/media/thumb-queue";
 import {
 	ensureSectionThumb,
 	defaultVideoThumbnailFrameIndex,
 	getMediaKind,
-} from "../../../../lib/thumb-store";
+} from "../../../../lib/media/thumb-store";
 import {
 	getSectionById,
 	getSectionIndex,
 	jsonError,
-} from "../../../../lib/api-route";
+} from "../../../../lib/api/api-route";
 interface RouteContext {
 	params: Promise<{
 		path?: string[];

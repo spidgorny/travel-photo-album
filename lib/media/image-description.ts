@@ -1,7 +1,7 @@
 import fs from "fs/promises";
-import type { ConfigSection } from "./config.ts";
-import { normalizeStoredDescription } from "./file-meta.ts";
-import type { ThumbImageMetaData } from "./thumb-jobs.ts";
+import type { ConfigSection } from "../config/config.ts";
+import { normalizeStoredDescription } from "../media/file-meta.ts";
+import type { ThumbImageMetaData } from "../media/thumb-jobs.ts";
 
 const defaultCaptionPrompt =
 	"Write one short searchable description for this travel photo. Mention the scene, location clues, landmarks, notable objects, weather, and time of day if clearly visible. Use plain factual language, one sentence, no markdown.";

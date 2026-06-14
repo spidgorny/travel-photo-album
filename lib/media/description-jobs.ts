@@ -1,4 +1,4 @@
-import type { ConfigSection } from "./config.ts";
+import type { ConfigSection } from "../config/config.ts";
 
 export const descriptionQueueUrl =
 	process.env.DESCRIPTION_QUEUE_URL?.trim() ||

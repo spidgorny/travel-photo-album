@@ -1,8 +1,8 @@
 // @ts-nocheck
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import process from "process";
 import { Queue, Worker } from "bullmq";
-import { closeRedisClient } from "../lib/cache.ts";
+import { closeRedisClient } from "../lib/system/cache.ts";
 import {
 	getMediaQueueConnection,
 	getWorkerConcurrency,
@@ -11,8 +11,8 @@ import {
 	mediaQueuePrefix,
 	processMediaJob,
 	resolveMediaJobName,
-} from "../lib/media-worker.ts";
-import { closeThumbKvClient } from "../lib/thumb-store.ts";
+} from "../lib/media/media-worker.ts";
+import { closeThumbKvClient } from "../lib/media/thumb-store.ts";
 
 const queue = new Queue(mediaQueueName, {
 	connection: getMediaQueueConnection(),

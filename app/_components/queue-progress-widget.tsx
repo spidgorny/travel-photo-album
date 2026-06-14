@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { fetcher } from "../../lib/http";
+import { fetcher } from "../../lib/api/http";
 import type { QueueProgressResponse } from "./ui-types";
 import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 

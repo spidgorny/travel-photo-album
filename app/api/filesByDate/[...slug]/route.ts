@@ -1,19 +1,19 @@
 import { DateTime } from "luxon";
 import { NextResponse } from "next/server";
 import invariant from "tiny-invariant";
-import config from "../../../../lib/config";
-import { getSectionById, getSectionIndex } from "../../../../lib/api-route";
-import { isValidDate } from "../../../../lib/date";
+import config from "../../../../lib/config/config";
+import { getSectionById, getSectionIndex } from "../../../../lib/api/api-route";
+import { isValidDate } from "../../../../lib/utils/date";
 import {
 	getStoredMetaDirectoryKey,
 	normalizeStoredDescription,
 	normalizeStoredPhash,
 	readStoredMetaDirectory,
-} from "../../../../lib/file-meta";
-import { formatDayKey, getFilesWithOptionalDates, parseDayKey } from "../../../../lib/files";
-import type { StoredDirectoryMetaEntry } from "../../../../lib/files-types";
-import { getImageDimensions } from "../../../../lib/thumb-store";
-import type { DatedFileEntry, FileEntryWithOptionalDate } from "../../../../lib/files-types";
+} from "../../../../lib/media/file-meta";
+import { formatDayKey, getFilesWithOptionalDates, parseDayKey } from "../../../../lib/media/files";
+import type { StoredDirectoryMetaEntry } from "../../../../lib/media/files-types";
+import { getImageDimensions } from "../../../../lib/media/thumb-store";
+import type { DatedFileEntry, FileEntryWithOptionalDate } from "../../../../lib/media/files-types";
 
 const UNDATED_BUCKET = "undated";
 

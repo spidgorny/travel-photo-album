@@ -15,22 +15,22 @@
  *   --delete-old  Delete old keys after copying (default: keep old keys).
  */
 
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import mime from "mime-types";
 import process from "process";
 import invariant from "tiny-invariant";
-import config, { resolveSection } from "../lib/config.ts";
-import { getSectionById, getSectionIndex } from "../lib/api-route.ts";
+import config, { resolveSection } from "../lib/config/config.ts";
+import { getSectionById, getSectionIndex } from "../lib/api/api-route.ts";
 import {
 	getThumbKvClient,
 	thumbKvPrefix,
 	thumbnailTargetWidth,
 	videoThumbnailFrameCount,
-} from "../lib/thumb-store.ts";
-import { getFilteredFiles } from "../lib/files.ts";
+} from "../lib/media/thumb-store.ts";
+import { getFilteredFiles } from "../lib/media/files.ts";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");

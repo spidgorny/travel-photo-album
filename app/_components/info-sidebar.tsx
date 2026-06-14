@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import useSWR from "swr";
-import { fetcher } from "../../lib/http";
+import { fetcher } from "../../lib/api/http";
 import type { ThumbStorageResponse } from "./ui-types";
 import { ErrorState, Loading, getErrorMessage } from "./widget/loading";
 

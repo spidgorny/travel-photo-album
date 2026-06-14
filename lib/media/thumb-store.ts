@@ -9,7 +9,7 @@ import sharp from "sharp";
 import FfmpegCommand from "fluent-ffmpeg";
 import invariant from "tiny-invariant";
 import { createClient } from "redis";
-import { joinSectionPath } from "./files.ts";
+import { joinSectionPath } from "../media/files.ts";
 
 export const thumbKvUrl = process.env.THUMB_KV_URL?.trim() || "";
 export const thumbKvPrefix =

@@ -165,6 +165,7 @@ Example:
   "sections": [
     {
       "name": "P:/Photos",
+      "dockerPath": "/media/nas/photo/Photos",
       "linuxPath": "/media/nas/photo/Photos",
       "macPath": "/Volumes/photo/Photos",
       "winPath": "P:/Photos",
@@ -176,7 +177,8 @@ Example:
 
 Notes:
 
-- `macPath`, `linuxPath`, and `winPath` are normalized by `lib/config.ts`
+- `dockerPath`, `macPath`, `linuxPath`, and `winPath` are normalized by `lib/config/config.ts`
+- on Linux inside Docker, `dockerPath` is preferred; on native Linux, `linuxPath` is used
 - `thumbPath` is optional; without it, thumbnails and metadata can be stored in Kvrocks
 - `from` and `till` can limit the visible root-range within a collection
 
@@ -387,7 +389,7 @@ redis/                 Local Redis persistence
 ## Operational notes
 
 - `config.json` section order is part of the public API because the array index becomes the `sectionId`
-- `lib/files.ts#getFileDate()` extracts `YYYYMMDD` from filenames before falling back to filesystem timestamps
+- `lib/media/files.ts#getFileDate()` extracts `YYYYMMDD` from filenames before falling back to filesystem timestamps
 - API payload shapes are intentionally stable because the client expects fields such as `{ files }`, `{ dates }`, and `COMPUTED.Width`
 - `data/` is ignored and safe for generated local artifacts
 - Redis automatically reloads `dump.rdb` from `./redis` on startup

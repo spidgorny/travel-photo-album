@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { fetcher } from "../../../lib/http";
+import { fetcher } from "../../../lib/api/http";
 import type { FilesApiEntry, FilesResponse, UISection } from "../ui-types";
 import { buildApiPath, buildHomeHref } from "../url-paths";
 import { ErrorState, getErrorMessage } from "../widget/loading";

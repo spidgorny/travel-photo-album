@@ -192,12 +192,26 @@ def resolve_sections(config: dict[str, Any], requested_sections: list[str]) -> l
 
 
 def resolve_section_path(section: dict[str, Any]) -> str | None:
-    if sys.platform == "darwin":
-        candidates = [section.get("path"), section.get("macPath"), section.get("linuxPath"), section.get("winPath")]
-    elif os.name == "nt":
-        candidates = [section.get("path"), section.get("winPath"), section.get("pathWindows"), section.get("macPath")]
+    path_key = get_runtime_path_key()
+    if path_key == "dockerPath":
+        runtime_candidates = [section.get("dockerPath"), section.get("linuxPath")]
+    elif path_key == "winPath":
+        runtime_candidates = [section.get("winPath")]
+    elif path_key == "macPath":
+        runtime_candidates = [section.get("macPath")]
     else:
-        candidates = [section.get("path"), section.get("linuxPath"), section.get("macPath"), section.get("winPath")]
+        runtime_candidates = [section.get("linuxPath")]
+
+    candidates = [
+        *runtime_candidates,
+        section.get("pathWindows") if path_key == "winPath" else None,
+        section.get("path"),
+        section.get("dockerPath"),
+        section.get("macPath"),
+        section.get("linuxPath"),
+        section.get("winPath"),
+        section.get("pathWindows"),
+    ]
 
     for candidate in candidates:
         if isinstance(candidate, str) and candidate.strip():
@@ -427,6 +441,7 @@ def get_section_key_aliases(section: dict[str, Any]) -> list[str]:
 
     for candidate in [
         section.get("path"),
+        section.get("dockerPath"),
         section.get("macPath"),
         section.get("linuxPath"),
         section.get("winPath"),
@@ -458,6 +473,32 @@ def remap_section_key(section_key: str, from_root: str, to_root: str) -> str | N
     if section_key.startswith(f"{from_root}/"):
         return f"{to_root}{section_key[len(from_root):]}"
     return None
+
+
+def get_runtime_path_key() -> str:
+    if sys.platform == "darwin":
+        return "macPath"
+    if os.name == "nt":
+        return "winPath"
+    if is_running_in_docker():
+        return "dockerPath"
+    return "linuxPath"
+
+
+def is_running_in_docker() -> bool:
+    marker = os.environ.get("DOCKER_CONTAINER", "").strip()
+    if marker == "1":
+        return True
+
+    if Path("/.dockerenv").exists():
+        return True
+
+    try:
+        cgroup = Path("/proc/1/cgroup").read_text(encoding="utf-8").lower()
+    except OSError:
+        return False
+
+    return "docker" in cgroup or "containerd" in cgroup or "kubepods" in cgroup
 
 
 if __name__ == "__main__":

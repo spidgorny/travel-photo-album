@@ -1,18 +1,18 @@
-import "../lib/load-env.ts";
+import "../lib/system/load-env.ts";
 import crypto from "crypto";
 import path from "path";
 import process from "process";
 import sharp from "sharp";
 import invariant from "tiny-invariant";
-import config from "../lib/config.ts";
-import { listStoredMetaFilePaths } from "../lib/file-meta.ts";
+import config from "../lib/config/config.ts";
+import { listStoredMetaFilePaths } from "../lib/media/file-meta.ts";
 import {
 	closeThumbKvClient,
 	getThumbKvClient,
 	isImagePath,
 	thumbnailTargetWidth,
 	thumbKvPrefix,
-} from "../lib/thumb-store.ts";
+} from "../lib/media/thumb-store.ts";
 
 const defaultVariant = `w${thumbnailTargetWidth}-jpeg`;
 

@@ -1,16 +1,16 @@
-import type { ConfigSection } from "./config.ts";
+import type { ConfigSection } from "../config/config.ts";
 import {
 	getStoredMetaDirectoryKey,
 	normalizeStoredDescription,
 	readStoredMetaDirectory,
-} from "./file-meta.ts";
-import type { StoredDirectoryMetaEntry } from "./files-types.ts";
+} from "../media/file-meta.ts";
+import type { StoredDirectoryMetaEntry } from "../media/files-types.ts";
 import {
 	getMatchingFilesForFolder,
 	searchLibrary,
 	type SearchResultGroup,
 	type SearchSection,
-} from "./search-backend.ts";
+} from "../search/search-backend.ts";
 
 export function normalizeSearchQuery(value: string | null | undefined) {
 	const normalized = value?.trim().toLocaleLowerCase();

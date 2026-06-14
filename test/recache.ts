@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { runTest } from "./bootstrap.ts";
-import { initRecache } from "../lib/recache.ts";
+import { initRecache } from "../lib/utils/recache.ts";
 
 runTest(async () => {
   console.log("RunTest");

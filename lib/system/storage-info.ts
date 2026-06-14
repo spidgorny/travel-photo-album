@@ -1,5 +1,5 @@
-import config from "./config";
-import { getThumbKvClient, thumbKvPrefix, thumbKvUrl } from "./thumb-store";
+import config from "../config/config";
+import { getThumbKvClient, thumbKvPrefix, thumbKvUrl } from "../media/thumb-store";
 
 export async function getThumbStorageInfo() {
 	const sections = Array.isArray(config?.sections) ? config.sections : [];

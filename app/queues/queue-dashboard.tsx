@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
-import { fetcher } from "../../lib/http";
+import { fetcher } from "../../lib/api/http";
 import { AppHeader } from "../_components/app-header";
 import type {
 	QueueCounts,

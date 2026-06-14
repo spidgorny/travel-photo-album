@@ -6,17 +6,17 @@ import mime from "mime-types";
 import sharp from "sharp";
 import { getNearestCity } from "offline-geocode-city";
 import invariant from "tiny-invariant";
-import type { ConfigSection } from "./config.ts";
-import { formatDayKey, getFileDate, joinSectionPath, parseDayKey } from "./files.ts";
-import { getThumbKvClient, thumbKvPrefix } from "./thumb-store.ts";
+import type { ConfigSection } from "../config/config.ts";
+import { formatDayKey, getFileDate, joinSectionPath, parseDayKey } from "../media/files.ts";
+import { getThumbKvClient, thumbKvPrefix } from "../media/thumb-store.ts";
 import type {
 	FileGpsCoordinates,
 	FileLocationLabel,
 	StoredDirectoryMetaEntry,
 	StoredFaceMatch,
 	StoredFaceMetadata,
-} from "./files-types.ts";
-import type { ThumbImageMetaData } from "./thumb-jobs.ts";
+} from "../media/files-types.ts";
+import type { ThumbImageMetaData } from "../media/thumb-jobs.ts";
 
 export type DirectoryMetaData = Record<string, StoredDirectoryMetaEntry>;
 const fallbackDimensions = { width: 3, height: 2 };
@@ -106,6 +106,7 @@ function getSectionKeyAliases(section: ConfigSection): string[] {
 
 	for (const candidate of [
 		section.path,
+		section.dockerPath,
 		section.macPath,
 		section.linuxPath,
 		section.winPath,

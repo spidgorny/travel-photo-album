@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import config from "../../../../lib/config";
-import { getSectionById, getSectionIndex, jsonError } from "../../../../lib/api-route";
-import { readStoredMetaForFile } from "../../../../lib/file-meta";
-import { getFilteredFiles } from "../../../../lib/files";
+import config from "../../../../lib/config/config";
+import { getSectionById, getSectionIndex, jsonError } from "../../../../lib/api/api-route";
+import { readStoredMetaForFile } from "../../../../lib/media/file-meta";
+import { getFilteredFiles } from "../../../../lib/media/files";
 import {
 	getMediaKind,
 	getStoredThumbMetaEntry,
 	hasStoredSectionThumb,
 	thumbnailTargetWidth,
-} from "../../../../lib/thumb-store";
+} from "../../../../lib/media/thumb-store";
 
 export const runtime = "nodejs";
 

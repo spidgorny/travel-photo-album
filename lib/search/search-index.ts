@@ -2,15 +2,15 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import config, { type ConfigSection } from "./config.ts";
+import config, { type ConfigSection } from "../config/config.ts";
 import {
 	listStoredMetaFilePaths,
 	readStoredFaceDataForFile,
 	readStoredMetaDirectory,
 	readStoredMetaForFile,
-} from "./file-meta.ts";
-import type { StoredDirectoryMetaEntry, StoredFaceMetadata } from "./files-types.ts";
-import { formatDayKey, getFileDate } from "./files.ts";
+} from "../media/file-meta.ts";
+import type { StoredDirectoryMetaEntry, StoredFaceMetadata } from "../media/files-types.ts";
+import { formatDayKey, getFileDate } from "../media/files.ts";
 
 export interface SearchSection extends ConfigSection {
 	id: number;
