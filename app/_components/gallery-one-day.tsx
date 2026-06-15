@@ -518,8 +518,8 @@ function SelectedImage({ index, photo, margin, left, top, selected, onClick }: S
 		>
 			<Image
 				src={photo.source.thumbnail}
-				title={photo.title ?? photo.caption}
-				alt={photo.title ?? photo.caption}
+				title={photo.title ?? photo.caption ?? ""}
+				alt={photo.title ?? photo.caption ?? ""}
 				onClick={(event) => onClick(event, { photo, index })}
 				onLoad={() => setIsLoaded(true)}
 				onError={() => setIsLoaded(true)}

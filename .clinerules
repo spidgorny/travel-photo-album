@@ -1,0 +1,22 @@
+# Tool Invocation Format Overrides
+CRITICAL: Never output tool calls as JSON objects.
+Do NOT output patterns like:
+{"name": "read_files", "arguments": {...}}
+{"name": "run_commands", "arguments": {...}}
+
+Instead, you must strictly use the custom Apache/Anthropic XML element tags for tool execution.
+Example for reading files:
+<read_files>
+<paths>
+<path>/Users/depidsvy/dev/travel-photo-album/logs/typecheck.log</path>
+</paths>
+</read_files>
+
+Example for running commands:
+<run_commands>
+<commands>
+<command>yarn run typecheck</command>
+</commands>
+</run_commands>
+
+Always execute tool calls natively using these XML tags directly. Never output the raw tool schema to the user as markdown text.

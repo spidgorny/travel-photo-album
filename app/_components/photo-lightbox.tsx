@@ -542,7 +542,7 @@ function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
 			) : null}
 			<Image
 				src={fallbackSrc}
-				alt={photo.title ?? photo.caption}
+				alt={photo.title ?? photo.caption ?? ''}
 				onLoad={() => {
 					setPreviewLoaded(true);
 					setShouldLoadOriginal(true);
@@ -562,7 +562,7 @@ function FullscreenImage({ photo }: { photo: GalleryPhoto }) {
 			{shouldLoadOriginal ? (
 				<Image
 					src={photo.source.regular}
-					alt={photo.title ?? photo.caption}
+					alt={photo.title ?? photo.caption ?? ''}
 					onLoad={() => setOriginalStatus("loaded")}
 					onError={() => setOriginalStatus("error")}
 					className={[
